@@ -141,6 +141,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--t900);-webkit-font
 .summary-final-note{font-size:11px;color:var(--g500);margin-top:3px}
 .summary-final-value{font-size:22px;font-weight:900;color:var(--g700);letter-spacing:-1px}
 .analysis-note{font-size:11px;color:var(--t400);text-align:center;padding:12px 6px;line-height:1.6}
+.price-row.bought{opacity:.4}
+.price-row.bought .price-name{text-decoration:line-through}
+.price-chk{width:20px;height:20px;border-radius:6px;border:2px solid var(--border-md);background:var(--surface);cursor:pointer;-webkit-appearance:none;appearance:none;flex-shrink:0;transition:all .15s;position:relative}
+.price-chk:checked{background:var(--g700);border-color:var(--g700)}
+.price-chk:checked::after{content:'';position:absolute;left:4px;top:1px;width:8px;height:5px;border-left:2.5px solid #fff;border-bottom:2.5px solid #fff;transform:rotate(-45deg)}
+.store-progress{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--g50);border-radius:var(--r);margin-bottom:10px;border:1px solid var(--g200)}
+.store-progress-bar-wrap{flex:1;height:6px;background:var(--g200);border-radius:3px;overflow:hidden}
+.store-progress-bar{height:100%;background:var(--g700);border-radius:3px;transition:width .3s}
+.store-progress-text{font-size:11px;font-weight:600;color:var(--g700);white-space:nowrap}
 
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:flex-end;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .overlay.show{display:flex}
@@ -677,7 +686,28 @@ async function doAnalyze(){
   }
 }
 
+// Track checked state per analysis session
+let analysisChecked = {};
+
+function updateStoreProgress(storeId){
+  const panel = document.getElementById('sp-'+storeId);
+  if(!panel) return;
+  const all = panel.querySelectorAll('.price-chk');
+  const checked = panel.querySelectorAll('.price-chk:checked');
+  const total = all.length;
+  const done = checked.length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const bar = panel.querySelector('.store-progress-bar');
+  const txt = panel.querySelector('.store-progress-text');
+  if(bar) bar.style.width = pct+'%';
+  if(txt) txt.textContent = done+'/'+total+' produtos';
+  // Update tab badge
+  const tabs = document.querySelectorAll('.stab');
+  tabs.forEach(t=>{ if(t.dataset.store===storeId){ t.textContent = t.dataset.name + (done>0?' ('+done+'/'+total+')':''); } });
+}
+
 function showAnalysis(data){
+  analysisChecked = {};
   document.getElementById('a-saving').textContent=data.saving_weekly?Math.round(data.saving_weekly)+'€':'—';
   document.getElementById('a-annual').textContent=data.saving_annual?Math.round(data.saving_annual).toLocaleString('pt')+'€ poupanca anual vs Mercadona':'';
   document.getElementById('analysis-date').textContent=data.semana||'';
@@ -687,16 +717,39 @@ function showAnalysis(data){
   const stores=[...(data.stores||[]),{id:'resumo',name:'Resumo',color:null,tagline:'',_sum:true}];
   stores.forEach((store,idx)=>{
     const isFirst=idx===0;
-    const tab=document.createElement('button'); tab.className='stab'+(isFirst?' on':''); tab.textContent=store.name;
+    const tab=document.createElement('button');
+    tab.className='stab'+(isFirst?' on':'');
+    tab.textContent=store.name;
+    tab.dataset.store=store.id;
+    tab.dataset.name=store.name;
     tab.onclick=()=>{ document.querySelectorAll('.stab').forEach(t=>t.classList.remove('on')); tab.classList.add('on'); document.querySelectorAll('.store-panel').forEach(p=>p.classList.remove('on')); document.getElementById('sp-'+store.id).classList.add('on'); };
     tabsEl.appendChild(tab);
     const panel=document.createElement('div'); panel.className='store-panel'+(isFirst?' on':''); panel.id='sp-'+store.id;
     if(store._sum){
       const rows=(data.stores||[]).map(s=>`<div class="summary-row"><div><div class="summary-store">${s.name}</div><div class="summary-store-note">${s.tagline}</div></div><div class="summary-total">${(s.total||0).toFixed(2)}€</div></div>`).join('');
       panel.innerHTML=`<div class="summary-card">${rows}<div class="summary-row"><div class="summary-store" style="color:var(--t400)">Mercadona (atual)</div><div class="summary-total" style="color:var(--t400)">227.00€</div></div></div><div class="summary-final"><div><div class="summary-final-label">Total mix otimizado</div><div class="summary-final-note">Poupanca de ${Math.round(data.saving_weekly||0)}€ por semana</div></div><div class="summary-final-value">${(data.total_mix||0).toFixed(2)}€</div></div><div class="analysis-note">Precos estimados com base em marcas proprias. Confirme precos atuais em cada loja.</div>`;
-    }else{
-      const cats=(store.categories||[]).map(cat=>`<div class="price-card"><div class="price-cat-hdr">${cat.name}</div>${(cat.items||[]).map(it=>`<div class="price-row"><div class="price-name">${it.name}${it.promo?`<span class="promo-badge">${it.promo}</span>`:''}</div><span class="price-qty">x${it.qty} ${it.unit}</span><span class="price-val">${((it.price||0)*(it.qty||1)).toFixed(2)}€</span></div>`).join('')}</div>`).join('');
-      panel.innerHTML=`<div class="store-hdr"><div class="store-color-bar" style="background:${store.color||'#ccc'}"></div><div class="store-hdr-info"><div class="store-hdr-name">${store.name}</div><div class="store-hdr-note">${store.tagline}</div></div><div class="store-hdr-total">${(store.total||0).toFixed(2)}€</div></div>${cats}`;
+    } else {
+      const totalItems = (store.categories||[]).reduce((s,c)=>s+(c.items||[]).length,0);
+      const cats=(store.categories||[]).map(cat=>`<div class="price-card"><div class="price-cat-hdr">${cat.name}</div>${(cat.items||[]).map((it,ii)=>{
+        const key=store.id+'-'+cat.name+'-'+ii;
+        return `<div class="price-row" id="pr-${key}">
+          <input type="checkbox" class="price-chk" onchange="toggleAnalysisItem('${store.id}','${key}',this)">
+          <div class="price-name">${it.name}${it.promo?`<span class="promo-badge">${it.promo}</span>`:''}</div>
+          <span class="price-qty">x${it.qty} ${it.unit}</span>
+          <span class="price-val">${((it.price||0)*(it.qty||1)).toFixed(2)}€</span>
+        </div>`;
+      }).join('')}</div>`).join('');
+      panel.innerHTML=`
+        <div class="store-hdr">
+          <div class="store-color-bar" style="background:${store.color||'#ccc'}"></div>
+          <div class="store-hdr-info"><div class="store-hdr-name">${store.name}</div><div class="store-hdr-note">${store.tagline}</div></div>
+          <div class="store-hdr-total">${(store.total||0).toFixed(2)}€</div>
+        </div>
+        <div class="store-progress">
+          <div class="store-progress-bar-wrap"><div class="store-progress-bar" style="width:0%"></div></div>
+          <span class="store-progress-text">0/${totalItems} produtos</span>
+        </div>
+        ${cats}`;
     }
     panelsEl.appendChild(panel);
   });
@@ -704,8 +757,16 @@ function showAnalysis(data){
   document.getElementById('screen-analysis').classList.remove('off');
 }
 
+function toggleAnalysisItem(storeId, key, chk){
+  const row = document.getElementById('pr-'+key);
+  if(row){
+    row.className = 'price-row' + (chk.checked ? ' bought' : '');
+  }
+  updateStoreProgress(storeId);
+}
+
 // Expose to global scope for inline handlers
-window.toggleChk=toggleChk; window.chgQ=chgQ; window.addItem=addItem;
+window.toggleChk=toggleChk; window.toggleAnalysisItem=toggleAnalysisItem; window.chgQ=chgQ; window.addItem=addItem;
 window.setFilter=setFilter; window.onSearch=onSearch;
 window.doClear=doClear; window.doMarkAll=doMarkAll; window.doReset=doReset; window.doCopyList=doCopyList;
 window.openMenu=openMenu; window.closeMenu=closeMenu; window.goBack=goBack; window.doAnalyze=doAnalyze;
