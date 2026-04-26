@@ -501,22 +501,22 @@ function initFirebase(){
     window.fbAnalysisRef = fbDb.ref('analysis-v1');
 
     // Listen for analysis (cart) from Firebase — syncs between both users
-    let isSavingAnalysis = false;
+    let myLastSaveTs = 0;
+    window._setMyLastSaveTs = (ts) => { myLastSaveTs = ts; };
     window.fbAnalysisRef.on('value', snap=>{
-      if(isSavingAnalysis) return; // ignore our own save echo
       const v = snap.val();
-      if(v && v.data){
-        cartData = v.data;
-        cartChecked = v.checked || {};
-        updateCartBadge();
-        // If cart screen is open, re-render
-        const cartScreen = document.getElementById('screen-cart');
-        if(cartScreen && !cartScreen.classList.contains('off')){
-          renderCart();
-        }
+      if(!v || !v.data) return;
+      // Ignore our own echo (within 10 seconds of our save)
+      if(v.ts && v.ts === myLastSaveTs) return;
+      cartData = v.data;
+      cartChecked = v.checked || {};
+      updateCartBadge();
+      // If cart screen is open, re-render
+      const cartScreen = document.getElementById('screen-cart');
+      if(cartScreen && !cartScreen.classList.contains('off')){
+        renderCart();
       }
     });
-    window._setIsSavingAnalysis = (v) => { isSavingAnalysis = v; };
 
     fbRef.on('value', snap=>{
       const v = snap.val();
@@ -788,13 +788,10 @@ function showAnalysis(data){
   // Save to Firebase and set as active cart
   cartData = data;
   cartChecked = {};
-  if(window.fbAnalysisRef){
-    if(window._setIsSavingAnalysis) window._setIsSavingAnalysis(true);
-    window.fbAnalysisRef.set({data, ts: Date.now(), checked: {}})
-      .catch(()=>{})
-      .finally(()=>{ 
-        setTimeout(()=>{ if(window._setIsSavingAnalysis) window._setIsSavingAnalysis(false); }, 2000);
-      });
+  const saveTs = Date.now();
+  if(window.fbAnalysisRef && window._setMyLastSaveTs){
+    window._setMyLastSaveTs(saveTs);
+    window.fbAnalysisRef.set({data, ts: saveTs, checked: {}}).catch(()=>{});
   }
   updateCartBadge();
 
@@ -945,8 +942,10 @@ function toggleCartItem(storeId, key, chk, itemName){
   if(row) row.className = 'cart-item'+(chk.checked?' bought':'');
 
   // Sync checked state to Firebase
-  if(window.fbAnalysisRef){
-    window.fbAnalysisRef.child('checked').set(cartChecked).catch(()=>{});
+  if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
+    const checkTs = Date.now();
+    window._setMyLastSaveTs(checkTs);
+    window.fbAnalysisRef.set({data: cartData, ts: checkTs, checked: cartChecked}).catch(()=>{});
   }
 
   // Also update main list
