@@ -46,6 +46,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--t900);-webkit-font
 .statsbar{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
 .stat{text-align:center;padding:9px 4px}
 .stat+.stat{border-left:1px solid var(--border)}
+#stat-cart-btn:hover{background:var(--g50)}
+#stat-cart-btn .stat-v{color:var(--g700)}
 .stat-v{font-size:22px;font-weight:800;color:var(--g700);line-height:1;letter-spacing:-1px}
 .stat-l{font-size:10px;color:var(--t400);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 
@@ -215,7 +217,11 @@ svg{display:block}
   <div class="offline-bar" id="offline-bar">Sem ligacao — alteracoes guardadas localmente</div>
   <div class="statsbar">
     <div class="stat"><div class="stat-v" id="s-tot">0</div><div class="stat-l">na lista</div></div>
-    <div class="stat"><div class="stat-v" id="s-chk">0</div><div class="stat-l">no carrinho</div></div>
+    <div class="stat" id="stat-cart-btn" onclick="openCart()" style="cursor:pointer;position:relative">
+      <div class="stat-v" id="s-chk">0</div>
+      <div class="stat-l" id="stat-cart-lbl">carrinho</div>
+      <div id="cart-dot" style="display:none;position:absolute;top:6px;right:8px;width:7px;height:7px;border-radius:50%;background:#52b788"></div>
+    </div>
     <div class="stat"><div class="stat-v" id="s-left">0</div><div class="stat-l">por buscar</div></div>
   </div>
   <div class="search-wrap">
@@ -865,8 +871,8 @@ function updateCartBadge(){
   chkEl.textContent = total;
   if(dot) dot.style.display = total > 0 ? 'block' : 'none';
   // Update stats label to show progress if partially done
-  const lbl = document.querySelector('#stat-cart-btn .stat-l');
-  if(lbl) lbl.textContent = done > 0 ? done+'/'+total+' comprados' : 'carrinho';
+  const lbl = document.getElementById('stat-cart-lbl');
+  if(lbl) lbl.textContent = total > 0 ? (done > 0 ? done+'/'+total+' comprados' : 'ver carrinho') : 'carrinho';
 }
 
 function renderCart(){
