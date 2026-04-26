@@ -219,7 +219,7 @@ svg{display:block}
     <div class="stat"><div class="stat-v" id="s-tot">0</div><div class="stat-l">na lista</div></div>
     <div class="stat" id="stat-cart-btn" onclick="openCart()" style="cursor:pointer;position:relative">
       <div class="stat-v" id="s-chk">0</div>
-      <div class="stat-l" id="stat-cart-lbl">carrinho 🛒</div>
+      <div class="stat-l" id="stat-cart-lbl">carrinho</div>
       <div id="cart-dot" style="display:none;position:absolute;top:6px;right:8px;width:7px;height:7px;border-radius:50%;background:#52b788"></div>
     </div>
     <div class="stat"><div class="stat-v" id="s-left">0</div><div class="stat-l">por buscar</div></div>
@@ -256,8 +256,8 @@ svg{display:block}
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 4L6 9l5 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Lista
       </button>
-      <div style="flex:1;text-align:center;font-size:15px;font-weight:700">Analise de precos</div>
-      <button onclick="goBack();setTimeout(openCart,100)" style="background:rgba(255,255,255,.2);border:none;color:white;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🛒 Carrinho</button>
+      <div style="flex:1;text-align:center;font-size:15px;font-weight:700">🛒 Lista por Supermercado</div>
+      <button onclick="clearCart()" style="background:rgba(255,255,255,.15);border:none;color:white;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;white-space:nowrap">Limpar</button>
       <div id="analysis-date" style="display:none"></div>
     </div>
   </div>
@@ -688,7 +688,6 @@ function closeMenu(){ document.getElementById('ov-menu').classList.remove('show'
 function goBack(){
   document.getElementById('screen-list').classList.remove('off');
   document.getElementById('screen-analysis').classList.add('off');
-  document.getElementById('screen-cart').classList.add('off');
 }
 
 let toastT;
@@ -811,22 +810,19 @@ function toggleAnalysisItem(storeId, key, chk, itemName){
   // Update analysis row visually
   const row = document.getElementById('pr-'+key);
   if(row) row.className = 'price-row' + (chk.checked ? ' bought' : '');
-  updateStoreProgress(storeId);
-
-  // Sync to main list: find item by name across all categories and mark as checked
-  if(itemName){
-    const name = itemName.toLowerCase().trim();
-    let found = false;
-    CATS.forEach(cat => {
-      (S[cat.id]||[]).forEach(item => {
-        if(item.n.toLowerCase().trim() === name || name.includes(item.n.toLowerCase().trim()) || item.n.toLowerCase().trim().includes(name.split(' ')[0])){
-          item.c = chk.checked;
-          found = true;
-        }
-      });
-    });
-    if(found){ updateStats(); saveAll(); }
+  
+  // Track in cartChecked
+  cartChecked[key] = chk.checked;
+  
+  // Save to Firebase
+  if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
+    const ts = Date.now();
+    window._setMyLastSaveTs(ts);
+    window.fbAnalysisRef.set({data: cartData, ts, checked: cartChecked}).catch(()=>{});
   }
+
+  updateStoreProgress(storeId);
+  updateCartBadge();
 }
 
 // Expose to global scope for inline handlers
@@ -840,15 +836,15 @@ window.toast=toast;
 // ── CART (analysis saved as active shopping list) ──
 
 function openCart(){
-  if(!cartData){ toast('Ainda nao ha lista gerada — carrega em Analisar precos'); return; }
-  renderCart();
+  if(!cartData){ toast('Ainda nao ha lista — gera uma analise primeiro'); return; }
+  // Analysis screen IS the cart — just show it
   document.getElementById('screen-list').classList.add('off');
-  document.getElementById('screen-cart').classList.remove('off');
+  document.getElementById('screen-analysis').classList.remove('off');
 }
 
 function closeCart(){
-  document.getElementById('screen-cart').classList.add('off');
   document.getElementById('screen-list').classList.remove('off');
+  document.getElementById('screen-analysis').classList.add('off');
 }
 
 function clearCart(){
@@ -856,7 +852,9 @@ function clearCart(){
   cartData = null;
   cartChecked = {};
   if(window.fbAnalysisRef) window.fbAnalysisRef.remove();
-  closeCart();
+  // Go back to list
+  document.getElementById('screen-list').classList.remove('off');
+  document.getElementById('screen-analysis').classList.add('off');
   updateCartBadge();
   toast('Carrinho limpo — pronto para nova semana!');
 }
@@ -944,52 +942,12 @@ function renderCart(){
 }
 
 function toggleCartItem(storeId, key, chk, itemName){
-  cartChecked[key] = chk.checked;
-  const row = document.getElementById('ci-'+key);
-  if(row) row.className = 'cart-item'+(chk.checked?' bought':'');
-
-  // Sync checked state to Firebase
-  if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
-    const checkTs = Date.now();
-    window._setMyLastSaveTs(checkTs);
-    window.fbAnalysisRef.set({data: cartData, ts: checkTs, checked: cartChecked}).catch(()=>{});
-  }
-
-  // Also update main list
-  if(itemName){
-    const name = itemName.toLowerCase().trim();
-    CATS.forEach(cat=>{
-      (S[cat.id]||[]).forEach(item=>{
-        if(item.n.toLowerCase().trim()===name || item.n.toLowerCase().trim().split(' ').some(w=>name.includes(w)&&w.length>3)){
-          item.c = chk.checked;
-        }
-      });
-    });
-    saveAll();
-  }
-
-  updateCartBadge();
-  renderCartProgress();
+  // This is now handled by toggleAnalysisItem
+  toggleAnalysisItem(storeId, key, chk, itemName);
 }
 
 function renderCartProgress(){
-  if(!cartData) return;
-  const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
-  const total = allItems.length;
-  const done = Object.values(cartChecked).filter(Boolean).length;
-  const pct = total ? Math.round(done/total*100) : 0;
-  const bar = document.getElementById('cart-progress-bar');
-  const txt = document.getElementById('cart-progress-text');
-  if(bar) bar.style.width = pct+'%';
-  if(txt) txt.textContent = (total-done)+' produtos por comprar · '+done+' no cesto';
-
-  // Update store tabs
-  (cartData.stores||[]).forEach(store=>{
-    const storeItems = (store.categories||[]).flatMap(c=>c.items||[]);
-    const storeDone = storeItems.filter((_,i)=>cartChecked[store.id+'-'+i]).length;
-    const tab = document.getElementById('ctab-'+store.id);
-    if(tab) tab.textContent = store.name + (storeDone>0?' ✓'+storeDone:'');
-  });
+  // No-op: progress is shown in the analysis screen store panels
 }
 
 // ── BOOT ── render immediately, then try Firebase
