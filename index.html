@@ -821,6 +821,22 @@ function toggleAnalysisItem(storeId, key, chk, itemName){
     window.fbAnalysisRef.set({data: cartData, ts, checked: cartChecked}).catch(()=>{});
   }
 
+  // Sync to main list — mark matching product as checked/unchecked
+  if(itemName){
+    const needle = itemName.toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+    const needleWords = needle.split(' ').filter(w=>w.length>2);
+    CATS.forEach(cat=>{
+      (S[cat.id]||[]).forEach(item=>{
+        const hay = item.n.toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+        // Match if any significant word of the analysis item appears in the list item name or vice versa
+        const match = needleWords.some(w=>hay.includes(w)) || hay.split(' ').filter(w=>w.length>2).some(w=>needle.includes(w));
+        if(match) item.c = chk.checked;
+      });
+    });
+    saveAll();
+    render(); // re-render to reflect checked state in main list
+  }
+
   updateStoreProgress(storeId);
   updateCartBadge();
 }
