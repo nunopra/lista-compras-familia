@@ -219,7 +219,7 @@ svg{display:block}
     <div class="stat"><div class="stat-v" id="s-tot">0</div><div class="stat-l">na lista</div></div>
     <div class="stat" id="stat-cart-btn" onclick="openCart()" style="cursor:pointer;position:relative">
       <div class="stat-v" id="s-chk">0</div>
-      <div class="stat-l" id="stat-cart-lbl">carrinho</div>
+      <div class="stat-l" id="stat-cart-lbl">carrinho 🛒</div>
       <div id="cart-dot" style="display:none;position:absolute;top:6px;right:8px;width:7px;height:7px;border-radius:50%;background:#52b788"></div>
     </div>
     <div class="stat"><div class="stat-v" id="s-left">0</div><div class="stat-l">por buscar</div></div>
@@ -625,6 +625,7 @@ function render(){
   });
   if(!any) el.innerHTML=`<div class="empty-state"><div class="empty-icon">&#128722;</div><div class="empty-text">Nenhum produto encontrado</div></div>`;
   updateStats();
+  updateCartBadge(); // Always refresh cart badge after render
 }
 
 function toggleCat(id,card){
@@ -669,10 +670,10 @@ function addItem(inp){
 }
 
 function updateStats(){
-  let tot=0,chk=0,left=0;
-  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{if(i.q>0){tot++;if(i.c)chk++;else left++;}});});
+  let tot=0,left=0;
+  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{if(i.q>0){tot++;if(!i.c)left++;}});});
   document.getElementById('s-tot').textContent=tot;
-  document.getElementById('s-chk').textContent=chk;
+  // s-chk is managed exclusively by updateCartBadge()
   document.getElementById('s-left').textContent=left;
 }
 
