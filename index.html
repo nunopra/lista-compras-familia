@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -251,7 +252,7 @@ svg{display:block}
         Lista
       </button>
       <div style="flex:1;text-align:center;font-size:15px;font-weight:700">Analise de precos</div>
-      <div style="width:60px;text-align:right;font-size:11px;opacity:.55" id="analysis-date"></div>
+      <button onclick="goBack();setTimeout(openCart,100)" style="background:rgba(255,255,255,.2);border:none;color:white;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🛒 Carrinho</button>
     </div>
   </div>
   <div class="savings-banner">
@@ -496,6 +497,21 @@ function initFirebase(){
     });
     fbDb = firebase.database();
     fbRef = fbDb.ref('lista-v2');
+    window.fbAnalysisRef = fbDb.ref('analysis-v1');
+
+    // Listen for analysis (cart) from Firebase — syncs between both users
+    window.fbAnalysisRef.on('value', snap=>{
+      const v = snap.val();
+      if(v && v.data){
+        cartData = v.data;
+        cartChecked = v.checked || {};
+        updateCartBadge();
+        // If cart screen is open, re-render
+        if(!document.getElementById('screen-cart').classList.contains('off')){
+          renderCart();
+        }
+      }
+    });
 
     fbRef.on('value', snap=>{
       const v = snap.val();
@@ -657,7 +673,11 @@ function doReset(){ if(!confirm('Repor lista para valores padrao?'))return; S=de
 function doCopyList(){ const l=['Lista de compras\n']; CATS.forEach(c=>{const it=(S[c.id]||[]).filter(i=>i.q>0&&!i.c);if(it.length){l.push('\n'+c.name.toUpperCase());it.forEach(i=>l.push('  - '+i.n+' ('+i.q+' '+i.u+')'));}}); navigator.clipboard?.writeText(l.join('\n')).then(()=>toast('Copiado!')).catch(()=>toast('Erro')); }
 function openMenu(){ document.getElementById('ov-menu').classList.add('show'); }
 function closeMenu(){ document.getElementById('ov-menu').classList.remove('show'); }
-function goBack(){ document.getElementById('screen-list').classList.remove('off'); document.getElementById('screen-analysis').classList.add('off'); }
+function goBack(){
+  document.getElementById('screen-list').classList.remove('off');
+  document.getElementById('screen-analysis').classList.add('off');
+  document.getElementById('screen-cart').classList.add('off');
+}
 
 let toastT;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
@@ -733,7 +753,7 @@ function showAnalysis(data){
       const cats=(store.categories||[]).map(cat=>`<div class="price-card"><div class="price-cat-hdr">${cat.name}</div>${(cat.items||[]).map((it,ii)=>{
         const key=store.id+'-'+cat.name+'-'+ii;
         return `<div class="price-row" id="pr-${key}">
-          <input type="checkbox" class="price-chk" onchange="toggleAnalysisItem('${store.id}','${key}',this)">
+          <input type="checkbox" class="price-chk" onchange="toggleAnalysisItem('${store.id}','${key}',this,'${it.name}')">
           <div class="price-name">${it.name}${it.promo?`<span class="promo-badge">${it.promo}</span>`:''}</div>
           <span class="price-qty">x${it.qty} ${it.unit}</span>
           <span class="price-val">${((it.price||0)*(it.qty||1)).toFixed(2)}€</span>
@@ -753,24 +773,203 @@ function showAnalysis(data){
     }
     panelsEl.appendChild(panel);
   });
+  // Save to Firebase and set as active cart
+  cartData = data;
+  cartChecked = {};
+  if(window.fbAnalysisRef){
+    window.fbAnalysisRef.set({data, ts: Date.now(), checked: {}}).catch(()=>{});
+  }
+  updateCartBadge();
+
+  // Show analysis first (with prices), then user can go to cart via the carrinho button
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
 
-function toggleAnalysisItem(storeId, key, chk){
+function toggleAnalysisItem(storeId, key, chk, itemName){
+  // Update analysis row visually
   const row = document.getElementById('pr-'+key);
-  if(row){
-    row.className = 'price-row' + (chk.checked ? ' bought' : '');
-  }
+  if(row) row.className = 'price-row' + (chk.checked ? ' bought' : '');
   updateStoreProgress(storeId);
+
+  // Sync to main list: find item by name across all categories and mark as checked
+  if(itemName){
+    const name = itemName.toLowerCase().trim();
+    let found = false;
+    CATS.forEach(cat => {
+      (S[cat.id]||[]).forEach(item => {
+        if(item.n.toLowerCase().trim() === name || name.includes(item.n.toLowerCase().trim()) || item.n.toLowerCase().trim().includes(name.split(' ')[0])){
+          item.c = chk.checked;
+          found = true;
+        }
+      });
+    });
+    if(found){ updateStats(); saveAll(); }
+  }
 }
 
 // Expose to global scope for inline handlers
-window.toggleChk=toggleChk; window.toggleAnalysisItem=toggleAnalysisItem; window.chgQ=chgQ; window.addItem=addItem;
+window.toggleChk=toggleChk; window.toggleAnalysisItem=toggleAnalysisItem; window.showAnalysis=showAnalysis;
+window.openCart=openCart; window.closeCart=closeCart; window.clearCart=clearCart; window.toggleCartItem=toggleCartItem; window.chgQ=chgQ; window.addItem=addItem;
 window.setFilter=setFilter; window.onSearch=onSearch;
 window.doClear=doClear; window.doMarkAll=doMarkAll; window.doReset=doReset; window.doCopyList=doCopyList;
 window.openMenu=openMenu; window.closeMenu=closeMenu; window.goBack=goBack; window.doAnalyze=doAnalyze;
 window.toast=toast;
+
+// ── CART (analysis saved as active shopping list) ──
+let cartData = null;
+let cartChecked = {}; // key -> bool, synced via Firebase
+
+function openCart(){
+  if(!cartData){ toast('Ainda nao ha lista gerada — carrega em Analisar precos'); return; }
+  renderCart();
+  document.getElementById('screen-list').classList.add('off');
+  document.getElementById('screen-cart').classList.remove('off');
+}
+
+function closeCart(){
+  document.getElementById('screen-cart').classList.add('off');
+  document.getElementById('screen-list').classList.remove('off');
+}
+
+function clearCart(){
+  if(!confirm('Limpar o carrinho? A lista de compras por supermercado sera apagada.')) return;
+  cartData = null;
+  cartChecked = {};
+  if(window.fbAnalysisRef) window.fbAnalysisRef.remove();
+  closeCart();
+  updateCartBadge();
+  toast('Carrinho limpo — pronto para nova semana!');
+}
+
+function updateCartBadge(){
+  const dot = document.getElementById('cart-dot');
+  const chkEl = document.getElementById('s-chk');
+  if(!cartData || !(cartData.stores||[]).length){ dot.style.display='none'; chkEl.textContent='0'; return; }
+  const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
+  const total = allItems.length;
+  const done = Object.values(cartChecked).filter(Boolean).length;
+  // Show total items in cart (not checked count — that's shown inside the cart screen)
+  chkEl.textContent = total;
+  dot.style.display = total > 0 ? 'block' : 'none';
+  // Update stats label to show progress if partially done
+  const lbl = document.querySelector('#stat-cart-btn .stat-l');
+  if(lbl) lbl.textContent = done > 0 ? done+'/'+total+' comprados' : 'carrinho';
+}
+
+function renderCart(){
+  if(!cartData){ document.getElementById('cart-panels').innerHTML='<div class="empty-cart"><div style="font-size:44px;opacity:.3">🛒</div><div style="font-size:14px;margin-top:12px">Ainda nao ha lista — gera uma analise primeiro</div></div>'; return; }
+
+  document.getElementById('cart-date').textContent = cartData.semana||'';
+  document.getElementById('cart-saving').textContent = cartData.saving_weekly ? Math.round(cartData.saving_weekly)+'€ poupados' : '';
+
+  const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
+  const total = allItems.length;
+  const done = Object.values(cartChecked).filter(Boolean).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('cart-progress-bar').style.width = pct+'%';
+  document.getElementById('cart-progress-text').textContent = (total-done)+' produtos por comprar · '+done+' no cesto';
+
+  const tabsEl = document.getElementById('cart-tabs');
+  const panelsEl = document.getElementById('cart-panels');
+  tabsEl.innerHTML = ''; panelsEl.innerHTML = '';
+  panelsEl.style.cssText = 'flex:1;overflow:hidden;position:relative';
+
+  (cartData.stores||[]).forEach((store, idx)=>{
+    const isFirst = idx===0;
+    const storeItems = (store.categories||[]).flatMap(c=>c.items||[]);
+    const storeDone = storeItems.filter((_,i)=>cartChecked[store.id+'-'+i]).length;
+
+    const tab = document.createElement('button');
+    tab.className = 'stab'+(isFirst?' on':'');
+    tab.id = 'ctab-'+store.id;
+    tab.textContent = store.name + (storeDone>0?' ✓'+storeDone:'');
+    tab.onclick = ()=>{ document.querySelectorAll('.stab').forEach(t=>t.classList.remove('on')); tab.classList.add('on'); document.querySelectorAll('.store-panel').forEach(p=>p.classList.remove('on')); document.getElementById('cpanel-'+store.id).classList.add('on'); };
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement('div');
+    panel.className = 'store-panel'+(isFirst?' on':'');
+    panel.id = 'cpanel-'+store.id;
+    panel.style.cssText = 'padding:10px 13px 20px;overflow-y:auto;height:100%';
+
+    let itemIdx = 0;
+    const cats = (store.categories||[]).map(cat=>{
+      const rows = (cat.items||[]).map(it=>{
+        const key = store.id+'-'+itemIdx;
+        const checked = cartChecked[key]||false;
+        itemIdx++;
+        return `<div class="cart-item${checked?' bought':''}" id="ci-${key}">
+          <input type="checkbox" class="cart-item-chk" ${checked?'checked':''} onchange="toggleCartItem('${store.id}','${key}',this,'${it.name.replace(/'/g,"\'")}')">
+          <div class="cart-item-info">
+            <div class="cart-item-name">${it.name}${it.promo?` <span class="promo-badge">${it.promo}</span>`:''}</div>
+            <div class="cart-item-detail">x${it.qty} ${it.unit}</div>
+          </div>
+          <div class="cart-item-price">${((it.price||0)*(it.qty||1)).toFixed(2)}€</div>
+        </div>`;
+      }).join('');
+      return `<div class="price-card" style="margin-bottom:8px"><div class="price-cat-hdr">${cat.name}</div>${rows}</div>`;
+    }).join('');
+
+    const storeTotal = storeItems.length;
+    const storePct = storeTotal ? Math.round(storeDone/storeTotal*100) : 0;
+    panel.innerHTML = `
+      <div class="cart-store-hdr" style="margin-bottom:8px">
+        <div class="store-color-bar" style="background:${store.color||'#ccc'};width:4px;height:28px;border-radius:2px;flex-shrink:0"></div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:700">${store.name}</div><div style="font-size:11px;color:var(--t400)">${store.tagline}</div></div>
+        <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--g700)">${(store.total||0).toFixed(2)}€</div><div style="font-size:11px;color:var(--t400)">${storeDone}/${storeTotal} comprados</div></div>
+      </div>
+      <div style="margin-bottom:10px;height:4px;background:var(--g200);border-radius:2px;overflow:hidden"><div class="cart-store-prog-bar" style="width:${storePct}%;background:${store.color||'var(--g700)'}"></div></div>
+      ${cats}`;
+    panelsEl.appendChild(panel);
+  });
+}
+
+function toggleCartItem(storeId, key, chk, itemName){
+  cartChecked[key] = chk.checked;
+  const row = document.getElementById('ci-'+key);
+  if(row) row.className = 'cart-item'+(chk.checked?' bought':'');
+
+  // Sync checked state to Firebase
+  if(window.fbAnalysisRef){
+    window.fbAnalysisRef.child('checked').set(cartChecked).catch(()=>{});
+  }
+
+  // Also update main list
+  if(itemName){
+    const name = itemName.toLowerCase().trim();
+    CATS.forEach(cat=>{
+      (S[cat.id]||[]).forEach(item=>{
+        if(item.n.toLowerCase().trim()===name || item.n.toLowerCase().trim().split(' ').some(w=>name.includes(w)&&w.length>3)){
+          item.c = chk.checked;
+        }
+      });
+    });
+    saveAll();
+  }
+
+  updateCartBadge();
+  renderCartProgress();
+}
+
+function renderCartProgress(){
+  if(!cartData) return;
+  const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
+  const total = allItems.length;
+  const done = Object.values(cartChecked).filter(Boolean).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const bar = document.getElementById('cart-progress-bar');
+  const txt = document.getElementById('cart-progress-text');
+  if(bar) bar.style.width = pct+'%';
+  if(txt) txt.textContent = (total-done)+' produtos por comprar · '+done+' no cesto';
+
+  // Update store tabs
+  (cartData.stores||[]).forEach(store=>{
+    const storeItems = (store.categories||[]).flatMap(c=>c.items||[]);
+    const storeDone = storeItems.filter((_,i)=>cartChecked[store.id+'-'+i]).length;
+    const tab = document.getElementById('ctab-'+store.id);
+    if(tab) tab.textContent = store.name + (storeDone>0?' ✓'+storeDone:'');
+  });
+}
 
 // ── BOOT ── render immediately, then try Firebase
 initLocal();
