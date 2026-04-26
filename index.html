@@ -501,18 +501,22 @@ function initFirebase(){
     window.fbAnalysisRef = fbDb.ref('analysis-v1');
 
     // Listen for analysis (cart) from Firebase — syncs between both users
+    let isSavingAnalysis = false;
     window.fbAnalysisRef.on('value', snap=>{
+      if(isSavingAnalysis) return; // ignore our own save echo
       const v = snap.val();
       if(v && v.data){
         cartData = v.data;
         cartChecked = v.checked || {};
         updateCartBadge();
         // If cart screen is open, re-render
-        if(!document.getElementById('screen-cart').classList.contains('off')){
+        const cartScreen = document.getElementById('screen-cart');
+        if(cartScreen && !cartScreen.classList.contains('off')){
           renderCart();
         }
       }
     });
+    window._setIsSavingAnalysis = (v) => { isSavingAnalysis = v; };
 
     fbRef.on('value', snap=>{
       const v = snap.val();
@@ -785,7 +789,12 @@ function showAnalysis(data){
   cartData = data;
   cartChecked = {};
   if(window.fbAnalysisRef){
-    window.fbAnalysisRef.set({data, ts: Date.now(), checked: {}}).catch(()=>{});
+    if(window._setIsSavingAnalysis) window._setIsSavingAnalysis(true);
+    window.fbAnalysisRef.set({data, ts: Date.now(), checked: {}})
+      .catch(()=>{})
+      .finally(()=>{ 
+        setTimeout(()=>{ if(window._setIsSavingAnalysis) window._setIsSavingAnalysis(false); }, 2000);
+      });
   }
   updateCartBadge();
 
