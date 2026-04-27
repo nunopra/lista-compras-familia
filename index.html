@@ -454,6 +454,9 @@ let cartData = null, cartChecked = {};
 let filter = 'all', search = '', saveTimer = null;
 let fbReady = false, fbDb = null, fbRef = null;
 
+// ── Guard: prevent Firebase listener from overwriting a local clear ──
+let _ignoreFirebaseUntil = 0;
+
 function defaultState(){
   const s={};
   CATS.forEach(c=>{s[c.id]=c.items.map(i=>({n:i.n,q:i.q,u:i.u,note:i.note,c:false}));});
@@ -525,6 +528,9 @@ function initFirebase(){
     });
 
     fbRef.on('value', snap=>{
+      // ── GUARD: ignore Firebase if we just did a local clear/reset ──
+      if(Date.now() < _ignoreFirebaseUntil){ setDot('','sincronizado'); return; }
+
       const v = snap.val();
       if(v && v.S){
         // Merge: keep Firebase data but add any missing categories from defaults
@@ -679,9 +685,54 @@ function updateStats(){
 
 function setFilter(f,btn){ filter=f; document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); render(); }
 function onSearch(q){ search=q.toLowerCase(); render(); }
-function doClear(){ CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);}); render(); saveAll(); toast('Carrinho limpo'); }
+
+// ── BUG FIX 1: doClear — escreve imediatamente no Firebase e bloqueia listener por 5s ──
+function doClear(){
+  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);});
+  render();
+  saveLocal();
+  _ignoreFirebaseUntil = Date.now() + 5000; // bloqueia listener 5 segundos
+  if(fbReady && fbRef){
+    clearTimeout(saveTimer); // cancela qualquer escrita pendente
+    setDot('busy','a guardar…');
+    fbRef.set({S, open:[...openCats]})
+      .then(()=>{ _ignoreFirebaseUntil = 0; setDot('','sincronizado'); })
+      .catch(()=>{ _ignoreFirebaseUntil = 0; setDot('err','offline'); });
+  }
+  closeMenu();
+  toast('Carrinho limpo ✓');
+}
+
 function doMarkAll(){ CATS.forEach(c=>{(S[c.id]||[]).filter(i=>i.q>0).forEach(i=>i.c=true);}); render(); saveAll(); toast('Tudo marcado'); }
-function doReset(){ if(!confirm('Repor lista para valores padrao?'))return; S=defaultState(); openCats=new Set(CATS.map(c=>c.id)); render(); saveAll(); closeMenu(); toast('Lista reposta'); }
+
+// ── BUG FIX 2: doReset — mantém produtos adicionados, repoe apenas os da lista padrao ──
+function doReset(){
+  if(!confirm('Repor quantidades para os valores padrao?\nOs produtos que adicionaste ficam na lista.'))return;
+  const def = defaultState();
+  CATS.forEach(cat => {
+    const defNames = new Set(def[cat.id].map(i=>i.n.toLowerCase().trim()));
+    // Guardar produtos personalizados (nao existem nos defaults)
+    const customItems = (S[cat.id]||[])
+      .filter(i => !defNames.has(i.n.toLowerCase().trim()))
+      .map(i => ({...i, c: false}));
+    // Repor produtos default com quantidades padrao, desmarcar tudo
+    S[cat.id] = [...def[cat.id], ...customItems];
+    S[cat.id].sort((a,b) => a.n.localeCompare(b.n, 'pt'));
+  });
+  openCats = new Set(CATS.map(c=>c.id));
+  _ignoreFirebaseUntil = Date.now() + 5000;
+  if(fbReady && fbRef){
+    clearTimeout(saveTimer);
+    setDot('busy','a guardar…');
+    fbRef.set({S, open:[...openCats]})
+      .then(()=>{ _ignoreFirebaseUntil = 0; setDot('','sincronizado'); })
+      .catch(()=>{ _ignoreFirebaseUntil = 0; setDot('err','offline'); });
+  }
+  saveLocal();
+  render(); closeMenu();
+  toast('Lista reposta — produtos seus mantidos ✓');
+}
+
 function doCopyList(){ const l=['Lista de compras\n']; CATS.forEach(c=>{const it=(S[c.id]||[]).filter(i=>i.q>0&&!i.c);if(it.length){l.push('\n'+c.name.toUpperCase());it.forEach(i=>l.push('  - '+i.n+' ('+i.q+' '+i.u+')'));}}); navigator.clipboard?.writeText(l.join('\n')).then(()=>toast('Copiado!')).catch(()=>toast('Erro')); }
 function openMenu(){ document.getElementById('ov-menu').classList.add('show'); }
 function closeMenu(){ document.getElementById('ov-menu').classList.remove('show'); }
@@ -749,7 +800,6 @@ function showAnalysis(data){
   if(!aSaving||!tabsEl||!panelsEl){ toast('Erro: elementos não encontrados'); return; }
   aSaving.textContent=data.saving_weekly?Math.round(data.saving_weekly)+'€':'—';
   if(aAnnual) aAnnual.textContent=data.saving_annual?Math.round(data.saving_annual).toLocaleString('pt')+'€ poupanca anual vs Mercadona':'';
-  // aDate is optional
   if(aPromos) aPromos.innerHTML=(data.promos||[]).map((p,i)=>`<div class="promo-pill${i<2?' hot':''}">${p}</div>`).join('');
   tabsEl.innerHTML=''; panelsEl.innerHTML='';
   const stores=[...(data.stores||[]),{id:'resumo',name:'Resumo',color:null,tagline:'',_sum:true}];
@@ -801,20 +851,16 @@ function showAnalysis(data){
   }
   updateCartBadge();
 
-  // Show analysis first (with prices), then user can go to cart via the carrinho button
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
 
 function toggleAnalysisItem(storeId, key, chk, itemName){
-  // Update analysis row visually
   const row = document.getElementById('pr-'+key);
   if(row) row.className = 'price-row' + (chk.checked ? ' bought' : '');
   
-  // Track in cartChecked
   cartChecked[key] = chk.checked;
   
-  // Save to Firebase so both users see the same checked state
   if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
     const ts = Date.now();
     window._setMyLastSaveTs(ts);
@@ -837,7 +883,6 @@ window.toast=toast;
 
 function openCart(){
   if(!cartData){ toast('Ainda nao ha lista — gera uma analise primeiro'); return; }
-  // Analysis screen IS the cart — just show it
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
@@ -852,7 +897,6 @@ function clearCart(){
   cartData = null;
   cartChecked = {};
   if(window.fbAnalysisRef) window.fbAnalysisRef.remove();
-  // Go back to list
   document.getElementById('screen-list').classList.remove('off');
   document.getElementById('screen-analysis').classList.add('off');
   updateCartBadge();
@@ -866,88 +910,18 @@ function updateCartBadge(){
   const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
   const total = allItems.length;
   const done = Object.values(cartChecked).filter(Boolean).length;
-  // Show total items in cart (not checked count — that's shown inside the cart screen)
   chkEl.textContent = total;
   if(dot) dot.style.display = total > 0 ? 'block' : 'none';
-  // Update stats label to show progress if partially done
   const lbl = document.getElementById('stat-cart-lbl');
   if(lbl) lbl.textContent = total > 0 ? (done > 0 ? done+'/'+total+' comprados' : 'ver carrinho') : 'carrinho';
 }
 
 function renderCart(){
-  if(!cartData){ document.getElementById('cart-panels').innerHTML='<div class="empty-cart"><div style="font-size:44px;opacity:.3">🛒</div><div style="font-size:14px;margin-top:12px">Ainda nao ha lista — gera uma analise primeiro</div></div>'; return; }
-
-  document.getElementById('cart-date').textContent = cartData.semana||'';
-  document.getElementById('cart-saving').textContent = cartData.saving_weekly ? Math.round(cartData.saving_weekly)+'€ poupados' : '';
-
-  const allItems = (cartData.stores||[]).flatMap(s=>(s.categories||[]).flatMap(c=>c.items||[]));
-  const total = allItems.length;
-  const done = Object.values(cartChecked).filter(Boolean).length;
-  const pct = total ? Math.round(done/total*100) : 0;
-  const progBar = document.getElementById('cart-progress-bar'); if(progBar) progBar.style.width = pct+'%';
-  document.getElementById('cart-progress-text').textContent = (total-done)+' produtos por comprar · '+done+' no cesto';
-
-  const tabsEl = document.getElementById('cart-tabs');
-  const panelsEl = document.getElementById('cart-panels');
-  tabsEl.innerHTML = ''; panelsEl.innerHTML = '';
-  if(panelsEl) panelsEl.style.cssText = 'flex:1;overflow:hidden;position:relative';
-
-  (cartData.stores||[]).forEach((store, idx)=>{
-    const isFirst = idx===0;
-    const storeItems = (store.categories||[]).flatMap(c=>c.items||[]);
-    const storeDone = storeItems.filter((_,i)=>cartChecked[store.id+'-'+i]).length;
-
-    const tab = document.createElement('button');
-    tab.className = 'stab'+(isFirst?' on':'');
-    tab.id = 'ctab-'+store.id;
-    tab.textContent = store.name + (storeDone>0?' ✓'+storeDone:'');
-    tab.onclick = ()=>{ document.querySelectorAll('.stab').forEach(t=>t.classList.remove('on')); tab.classList.add('on'); document.querySelectorAll('.store-panel').forEach(p=>p.classList.remove('on')); document.getElementById('cpanel-'+store.id).classList.add('on'); };
-    tabsEl.appendChild(tab);
-
-    const panel = document.createElement('div');
-    panel.className = 'store-panel'+(isFirst?' on':'');
-    panel.id = 'cpanel-'+store.id;
-    if(panel) panel.style.cssText = 'padding:10px 13px 20px;overflow-y:auto;height:100%';
-
-    let itemIdx = 0;
-    const cats = (store.categories||[]).map(cat=>{
-      const rows = (cat.items||[]).map(it=>{
-        const key = store.id+'-'+itemIdx;
-        const checked = cartChecked[key]||false;
-        itemIdx++;
-        return `<div class="cart-item${checked?' bought':''}" id="ci-${key}">
-          <input type="checkbox" class="cart-item-chk" ${checked?'checked':''} data-name="${(it.name||'').replace(/"/g,'&quot;')}" onchange="toggleCartItem('${store.id}','${key}',this,this.dataset.name)">
-          <div class="cart-item-info">
-            <div class="cart-item-name">${it.name}${it.promo?` <span class="promo-badge">${it.promo}</span>`:''}</div>
-            <div class="cart-item-detail">x${it.qty} ${it.unit}</div>
-          </div>
-          <div class="cart-item-price">${((it.price||0)*(it.qty||1)).toFixed(2)}€</div>
-        </div>`;
-      }).join('');
-      return `<div class="price-card" style="margin-bottom:8px"><div class="price-cat-hdr">${cat.name}</div>${rows}</div>`;
-    }).join('');
-
-    const storeTotal = storeItems.length;
-    const storePct = storeTotal ? Math.round(storeDone/storeTotal*100) : 0;
-    panel.innerHTML = `
-      <div class="cart-store-hdr" style="margin-bottom:8px">
-        <div class="store-color-bar" style="background:${store.color||'#ccc'};width:4px;height:28px;border-radius:2px;flex-shrink:0"></div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:700">${store.name}</div><div style="font-size:11px;color:var(--t400)">${store.tagline}</div></div>
-        <div style="text-align:right"><div style="font-size:14px;font-weight:700;color:var(--g700)">${(store.total||0).toFixed(2)}€</div><div style="font-size:11px;color:var(--t400)">${storeDone}/${storeTotal} comprados</div></div>
-      </div>
-      <div style="margin-bottom:10px;height:4px;background:var(--g200);border-radius:2px;overflow:hidden"><div class="cart-store-prog-bar" style="width:${storePct}%;background:${store.color||'var(--g700)'}"></div></div>
-      ${cats}`;
-    panelsEl.appendChild(panel);
-  });
+  if(!cartData){ return; }
 }
 
 function toggleCartItem(storeId, key, chk, itemName){
-  // This is now handled by toggleAnalysisItem
   toggleAnalysisItem(storeId, key, chk, itemName);
-}
-
-function renderCartProgress(){
-  // No-op: progress is shown in the analysis screen store panels
 }
 
 // ── BOOT ── render immediately, then try Firebase
