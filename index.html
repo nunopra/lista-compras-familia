@@ -455,8 +455,9 @@ let cartData = null, cartChecked = {};
 let filter = 'all', search = '', saveTimer = null;
 let fbReady = false, fbDb = null, fbRef = null;
 
-// ── Guard: prevent Firebase listener from overwriting a local clear ──
-let _ignoreFirebaseUntil = 0;
+// ── Clear tracking: encoded in data, not time-based ──
+let _clearedAt = 0;        // timestamp of last clear operation
+let _lastInteractionAt = 0; // timestamp of last item check/uncheck
 
 function defaultState(){
   const s={};
@@ -516,46 +517,44 @@ function initFirebase(){
 
     firebase.auth().onAuthStateChanged(user => {
       if(!user) return; // aguarda login anónimo
+      if(fbReady) return; // já inicializado, evita registar listeners duplicados
     let myLastSaveTs = 0;
     window._setMyLastSaveTs = (ts) => { myLastSaveTs = ts; };
     window.fbAnalysisRef.on('value', snap=>{
       const v = snap.val();
-      if(!v || !v.data) return;
-      // Ignore our own echo (within 10 seconds of our save)
+      if(!v || !v.data){ cartData=null; cartChecked={}; updateCartBadge(); return; }
       if(v.ts && v.ts === myLastSaveTs) return;
       cartData = v.data;
       cartChecked = v.checked || {};
       updateCartBadge();
-      // If cart screen is open, re-render
-      const cartScreen = document.getElementById('screen-cart');
-      if(cartScreen && !cartScreen.classList.contains('off')){
-        renderCart();
-      }
     });
 
     fbRef.on('value', snap=>{
-      // ── GUARD: ignore Firebase if we just did a local clear/reset ──
-      if(Date.now() < _ignoreFirebaseUntil){ setDot('','sincronizado'); return; }
-
       const v = snap.val();
       if(v && v.S){
-        // Merge: keep Firebase data but add any missing categories from defaults
         const merged = defaultState();
         Object.keys(v.S).forEach(catId => {
           if(merged[catId]){
-            // Merge items: keep Firebase items, add any new default items not present
             const fbNames = new Set(v.S[catId].map(i=>i.n.toLowerCase().trim()));
             const newItems = merged[catId].filter(i=>!fbNames.has(i.n.toLowerCase().trim()));
             merged[catId] = [...v.S[catId], ...newItems];
-            // Sort alphabetically
             merged[catId].sort((a,b)=>a.n.localeCompare(b.n,'pt'));
           }
         });
+        // ── Sync clear/interaction timestamps from Firebase ──
+        const fbClearedAt = v.clearedAt || 0;
+        const fbLastInteractionAt = v.lastInteractionAt || 0;
+        if(fbClearedAt > _clearedAt) _clearedAt = fbClearedAt;
+        if(fbLastInteractionAt > _lastInteractionAt) _lastInteractionAt = fbLastInteractionAt;
+        // If cleared more recently than last interaction → force uncheck all
+        if(_clearedAt > _lastInteractionAt){
+          Object.keys(merged).forEach(catId => merged[catId].forEach(i => i.c = false));
+        }
         S = merged;
         if(v.open) openCats = new Set(v.open);
         saveLocal();
       } else if(!v){
-        fbRef.set({S, open:[...openCats]});
+        fbRef.set({S, open:[...openCats], clearedAt:_clearedAt, lastInteractionAt:_lastInteractionAt});
       }
       setDot('','sincronizado'); render();
     }, err=>{
@@ -576,7 +575,7 @@ function pushToFirebase(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     setDot('busy','a guardar…');
-    fbRef.set({S, open:[...openCats]})
+    fbRef.set({S, open:[...openCats], clearedAt:_clearedAt, lastInteractionAt:_lastInteractionAt})
       .then(()=>setDot('','sincronizado'))
       .catch(()=>setDot('err','offline'));
   }, 700);
@@ -651,6 +650,7 @@ function toggleCat(id,card){
 }
 
 function toggleChk(cat,i,v){
+  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   S[cat][i].c=v;
   const r=document.getElementById('p-'+cat+'-'+i);
   if(r){r.className='prod'+(v?' done':'');r.querySelector('.prod-name').className='prod-name'+(v?' done':'');}
@@ -693,19 +693,20 @@ function updateStats(){
 function setFilter(f,btn){ filter=f; document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); render(); }
 function onSearch(q){ search=q.toLowerCase(); render(); }
 
-// ── doClear — escreve imediatamente no Firebase, guard expira sozinho após 8s ──
+// ── doClear: usa clearedAt nos dados em vez de guard temporal ──
 function doClear(){
+  _clearedAt = Date.now();
+  _lastInteractionAt = 0;
   CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);});
+  render();
   saveLocal();
-  _ignoreFirebaseUntil = Date.now() + 8000; // guard de 8s — NÃO resetar no .then()
   if(fbReady && fbRef){
     clearTimeout(saveTimer);
     setDot('busy','a guardar…');
-    fbRef.set({S, open:[...openCats]})
+    fbRef.set({S, open:[...openCats], clearedAt:_clearedAt, lastInteractionAt:0})
       .then(()=>setDot('','sincronizado'))
       .catch(()=>setDot('err','offline'));
   }
-  render();
   closeMenu();
   toast('Carrinho limpo ✓');
 }
@@ -727,11 +728,12 @@ function doReset(){
     S[cat.id].sort((a,b) => a.n.localeCompare(b.n, 'pt'));
   });
   openCats = new Set(CATS.map(c=>c.id));
-  _ignoreFirebaseUntil = Date.now() + 8000; // guard de 8s — NAO resetar no .then()
+  _clearedAt = Date.now();
+  _lastInteractionAt = 0;
   if(fbReady && fbRef){
     clearTimeout(saveTimer);
     setDot('busy','a guardar…');
-    fbRef.set({S, open:[...openCats]})
+    fbRef.set({S, open:[...openCats], clearedAt:_clearedAt, lastInteractionAt:0})
       .then(()=>setDot('','sincronizado'))
       .catch(()=>setDot('err','offline'));
   }
@@ -890,6 +892,21 @@ window.toast=toast;
 
 function openCart(){
   if(!cartData){ toast('Ainda nao ha lista — gera uma analise primeiro'); return; }
+  // Se o ecrã de análise estiver vazio (ex: após reload da página), reconstrói o DOM
+  const tabsEl = document.getElementById('a-tabs');
+  if(tabsEl && !tabsEl.children.length){
+    showAnalysis(cartData); // reconstrói e navega automaticamente
+    // Restaurar checkboxes do estado guardado
+    setTimeout(()=>{
+      Object.entries(cartChecked).forEach(([key, checked])=>{
+        if(!checked) return;
+        const row = document.getElementById('pr-'+key);
+        if(row){ row.className='price-row bought'; const chk=row.querySelector('.price-chk'); if(chk) chk.checked=true; }
+      });
+      (cartData.stores||[]).forEach(s=>updateStoreProgress(s.id));
+    }, 50);
+    return;
+  }
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
