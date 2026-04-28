@@ -686,19 +686,19 @@ function updateStats(){
 function setFilter(f,btn){ filter=f; document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); render(); }
 function onSearch(q){ search=q.toLowerCase(); render(); }
 
-// ── BUG FIX 1: doClear — escreve imediatamente no Firebase e bloqueia listener por 5s ──
+// ── doClear — escreve imediatamente no Firebase, guard expira sozinho após 8s ──
 function doClear(){
   CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);});
-  render();
   saveLocal();
-  _ignoreFirebaseUntil = Date.now() + 5000; // bloqueia listener 5 segundos
+  _ignoreFirebaseUntil = Date.now() + 8000; // guard de 8s — NÃO resetar no .then()
   if(fbReady && fbRef){
-    clearTimeout(saveTimer); // cancela qualquer escrita pendente
+    clearTimeout(saveTimer);
     setDot('busy','a guardar…');
     fbRef.set({S, open:[...openCats]})
-      .then(()=>{ _ignoreFirebaseUntil = 0; setDot('','sincronizado'); })
-      .catch(()=>{ _ignoreFirebaseUntil = 0; setDot('err','offline'); });
+      .then(()=>setDot('','sincronizado'))
+      .catch(()=>setDot('err','offline'));
   }
+  render();
   closeMenu();
   toast('Carrinho limpo ✓');
 }
@@ -720,13 +720,13 @@ function doReset(){
     S[cat.id].sort((a,b) => a.n.localeCompare(b.n, 'pt'));
   });
   openCats = new Set(CATS.map(c=>c.id));
-  _ignoreFirebaseUntil = Date.now() + 5000;
+  _ignoreFirebaseUntil = Date.now() + 8000; // guard de 8s — NAO resetar no .then()
   if(fbReady && fbRef){
     clearTimeout(saveTimer);
     setDot('busy','a guardar…');
     fbRef.set({S, open:[...openCats]})
-      .then(()=>{ _ignoreFirebaseUntil = 0; setDot('','sincronizado'); })
-      .catch(()=>{ _ignoreFirebaseUntil = 0; setDot('err','offline'); });
+      .then(()=>setDot('','sincronizado'))
+      .catch(()=>setDot('err','offline'));
   }
   saveLocal();
   render(); closeMenu();
