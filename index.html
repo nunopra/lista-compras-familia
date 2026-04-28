@@ -313,6 +313,7 @@ svg{display:block}
 <!-- Firebase compat SDK (more reliable than ESM) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
 // ── App state ──
@@ -509,7 +510,12 @@ function initFirebase(){
     fbRef = fbDb.ref('lista-v2');
     window.fbAnalysisRef = fbDb.ref('analysis-v1');
 
-    // Listen for analysis (cart) from Firebase — syncs between both users
+    // ── Autenticação anónima — obrigatória para aceder à base de dados ──
+    firebase.auth().signInAnonymously()
+      .catch(err => { console.warn('Auth falhou:', err); setDot('err','sem auth'); });
+
+    firebase.auth().onAuthStateChanged(user => {
+      if(!user) return; // aguarda login anónimo
     let myLastSaveTs = 0;
     window._setMyLastSaveTs = (ts) => { myLastSaveTs = ts; };
     window.fbAnalysisRef.on('value', snap=>{
@@ -557,7 +563,8 @@ function initFirebase(){
       document.getElementById('offline-bar').classList.add('show');
     });
 
-    fbReady = true;
+      fbReady = true;
+    }); // fim onAuthStateChanged
   }catch(e){
     console.warn('Firebase init failed:', e);
     setDot('err','sem sync');
