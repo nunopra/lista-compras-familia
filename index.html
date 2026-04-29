@@ -649,6 +649,7 @@ function toggleChk(cat,i,v){
 }
 
 function chgQ(cat,i,d){
+  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   const nv=Math.max(0,(S[cat][i].q||0)+d); S[cat][i].q=nv;
   const el=document.getElementById('qv-'+cat+'-'+i); if(el)el.textContent=nv;
   updateStats(); saveAll();
@@ -661,6 +662,7 @@ function delItem(cat,i){
 }
 
 function addItem(inp){
+  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   const n=inp.value.trim(); if(!n)return;
   const cat=inp.dataset.cat; if(!S[cat])S[cat]=[];
   S[cat].push({n,q:1,u:'uni',note:'',c:false});
