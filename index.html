@@ -310,7 +310,6 @@ svg{display:block}
 
 <div class="toast" id="toast"></div>
 
-<!-- Firebase compat SDK (more reliable than ESM) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -455,9 +454,8 @@ let cartData = null, cartChecked = {};
 let filter = 'all', search = '', saveTimer = null;
 let fbReady = false, fbDb = null, fbRef = null;
 
-// ── Clear tracking: encoded in data, not time-based ──
-let _clearedAt = 0;        // timestamp of last clear operation
-let _lastInteractionAt = 0; // timestamp of last item check/uncheck
+let _clearedAt = 0;
+let _lastInteractionAt = 0;
 
 function defaultState(){
   const s={};
@@ -465,14 +463,12 @@ function defaultState(){
   return s;
 }
 
-// ── Render immediately with localStorage or defaults ──
 function initLocal(){
   try{
     const sv = localStorage.getItem('lista-local');
     if(sv){
       const d=JSON.parse(sv);
       if(d&&d.S){
-        // Merge with defaults to pick up new categories
         const merged = defaultState();
         Object.keys(d.S).forEach(catId => {
           if(merged[catId]){
@@ -495,7 +491,6 @@ function saveLocal(){
   try{ localStorage.setItem('lista-local', JSON.stringify({S, open:[...openCats]})); }catch(e){}
 }
 
-// ── Firebase (optional, secondary) ──
 function initFirebase(){
   try{
     const fbApp = firebase.initializeApp({
@@ -511,13 +506,12 @@ function initFirebase(){
     fbRef = fbDb.ref('lista-v2');
     window.fbAnalysisRef = fbDb.ref('analysis-v1');
 
-    // ── Autenticação anónima — obrigatória para aceder à base de dados ──
     firebase.auth().signInAnonymously()
       .catch(err => { console.warn('Auth falhou:', err); setDot('err','sem auth'); });
 
     firebase.auth().onAuthStateChanged(user => {
-      if(!user) return; // aguarda login anónimo
-      if(fbReady) return; // já inicializado, evita registar listeners duplicados
+      if(!user) return;
+      if(fbReady) return;
     let myLastSaveTs = 0;
     window._setMyLastSaveTs = (ts) => { myLastSaveTs = ts; };
     window.fbAnalysisRef.on('value', snap=>{
@@ -541,14 +535,13 @@ function initFirebase(){
             merged[catId].sort((a,b)=>a.n.localeCompare(b.n,'pt'));
           }
         });
-        // ── Sync clear/interaction timestamps from Firebase ──
         const fbClearedAt = v.clearedAt || 0;
         const fbLastInteractionAt = v.lastInteractionAt || 0;
         if(fbClearedAt > _clearedAt) _clearedAt = fbClearedAt;
         if(fbLastInteractionAt > _lastInteractionAt) _lastInteractionAt = fbLastInteractionAt;
-        // If cleared more recently than last interaction → force uncheck all
+        // Se limpou mais recentemente que a última interação → forçar q=0 e c=false em tudo
         if(_clearedAt > _lastInteractionAt){
-          Object.keys(merged).forEach(catId => merged[catId].forEach(i => i.c = false));
+          Object.keys(merged).forEach(catId => merged[catId].forEach(i => { i.c = false; i.q = 0; }));
         }
         S = merged;
         if(v.open) openCats = new Set(v.open);
@@ -591,7 +584,6 @@ function setDot(cls,txt){
   document.getElementById('stxt').textContent=txt;
 }
 
-// ── Render ──
 function render(){
   const el=document.getElementById('cats'); el.innerHTML=''; let any=false;
   CATS.forEach(cat=>{
@@ -611,7 +603,6 @@ function render(){
     <div class="cat-body" style="display:${isO?'block':'none'}">
       ${vis.map(it=>{
         const i=items.indexOf(it);
-        const isCustom = !CATS.find(c=>c.id===cat.id)?.items.find(def=>def.n.toLowerCase().trim()===it.n.toLowerCase().trim());
         return `<div class="prod${it.c?' done':''}" id="p-${cat.id}-${i}">
           <input type="checkbox" class="prod-chk" ${it.c?'checked':''} onchange="toggleChk('${cat.id}',${i},this.checked)">
           <div class="prod-info">
@@ -637,7 +628,7 @@ function render(){
   });
   if(!any) el.innerHTML=`<div class="empty-state"><div class="empty-icon">&#128722;</div><div class="empty-text">Nenhum produto encontrado</div></div>`;
   updateStats();
-  updateCartBadge(); // Always refresh cart badge after render
+  updateCartBadge();
 }
 
 function toggleCat(id,card){
@@ -650,7 +641,7 @@ function toggleCat(id,card){
 }
 
 function toggleChk(cat,i,v){
-  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
+  _lastInteractionAt = Date.now();
   S[cat][i].c=v;
   const r=document.getElementById('p-'+cat+'-'+i);
   if(r){r.className='prod'+(v?' done':'');r.querySelector('.prod-name').className='prod-name'+(v?' done':'');}
@@ -673,7 +664,6 @@ function addItem(inp){
   const n=inp.value.trim(); if(!n)return;
   const cat=inp.dataset.cat; if(!S[cat])S[cat]=[];
   S[cat].push({n,q:1,u:'uni',note:'',c:false});
-  // Sort alphabetically after adding, keeping checked items at bottom
   S[cat].sort((a,b)=>{
     if(a.c && !b.c) return 1;
     if(!a.c && b.c) return -1;
@@ -686,18 +676,22 @@ function updateStats(){
   let tot=0,left=0;
   CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{if(i.q>0){tot++;if(!i.c)left++;}});});
   document.getElementById('s-tot').textContent=tot;
-  // s-chk is managed exclusively by updateCartBadge()
   document.getElementById('s-left').textContent=left;
 }
 
 function setFilter(f,btn){ filter=f; document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); render(); }
 function onSearch(q){ search=q.toLowerCase(); render(); }
 
-// ── doClear: usa clearedAt nos dados em vez de guard temporal ──
+// ══════════════════════════════════════════════
+// FIX: doClear agora zera quantidades (i.q=0)
+// e desmarca checkboxes (i.c=false)
+// ══════════════════════════════════════════════
 function doClear(){
+  if(!confirm('Limpar toda a lista? Quantidades voltam a zero e tudo fica desmarcado.')) return;
   _clearedAt = Date.now();
   _lastInteractionAt = 0;
-  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);});
+  // ← CORREÇÃO: i.q=0 além de i.c=false
+  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{ i.c=false; i.q=0; });});
   render();
   saveLocal();
   if(fbReady && fbRef){
@@ -707,23 +701,19 @@ function doClear(){
       .then(()=>setDot('','sincronizado'))
       .catch(()=>setDot('err','offline'));
   }
-  closeMenu();
-  toast('Carrinho limpo ✓');
+  toast('Lista limpa — pronto para nova semana! ✓');
 }
 
 function doMarkAll(){ CATS.forEach(c=>{(S[c.id]||[]).filter(i=>i.q>0).forEach(i=>i.c=true);}); render(); saveAll(); toast('Tudo marcado'); }
 
-// ── BUG FIX 2: doReset — mantém produtos adicionados, repoe apenas os da lista padrao ──
 function doReset(){
   if(!confirm('Repor quantidades para os valores padrao?\nOs produtos que adicionaste ficam na lista.'))return;
   const def = defaultState();
   CATS.forEach(cat => {
     const defNames = new Set(def[cat.id].map(i=>i.n.toLowerCase().trim()));
-    // Guardar produtos personalizados (nao existem nos defaults)
     const customItems = (S[cat.id]||[])
       .filter(i => !defNames.has(i.n.toLowerCase().trim()))
       .map(i => ({...i, c: false}));
-    // Repor produtos default com quantidades padrao, desmarcar tudo
     S[cat.id] = [...def[cat.id], ...customItems];
     S[cat.id].sort((a,b) => a.n.localeCompare(b.n, 'pt'));
   });
@@ -753,14 +743,13 @@ function goBack(){
 let toastT;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
 
-// ── Analysis ──
 let stepTimer;
 function animateSteps(){ const s=['ls1','ls2','ls3']; let i=0; s.forEach(id=>document.getElementById(id)?.classList.remove('active')); document.getElementById('ls1').classList.add('active'); stepTimer=setInterval(()=>{i++;if(i<s.length){s.forEach(id=>document.getElementById(id)?.classList.remove('active'));document.getElementById(s[i])?.classList.add('active');}},4000); }
 
 async function doAnalyze(){
   const lines=[];
   CATS.forEach(cat=>{ const it=(S[cat.id]||[]).filter(i=>i.q>0); if(it.length) lines.push(cat.name+': '+it.map(i=>i.n+' x'+i.q+' '+i.u).join(', ')); });
-  if(!lines.length){ toast('A lista esta vazia'); return; }
+  if(!lines.length){ toast('A lista esta vazia — adiciona produtos primeiro'); return; }
   document.getElementById('loading').classList.add('show'); animateSteps();
   try{
     const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list:lines.join('\n')})});
@@ -777,7 +766,6 @@ async function doAnalyze(){
   }
 }
 
-// Track checked state per analysis session
 let analysisChecked = {};
 
 function updateStoreProgress(storeId){
@@ -792,21 +780,19 @@ function updateStoreProgress(storeId){
   const txt = panel.querySelector('.store-progress-text');
   if(bar) bar.style.width = pct+'%';
   if(txt) txt.textContent = done+'/'+total+' produtos';
-  // Update tab badge
   const tabs = document.querySelectorAll('.stab');
   tabs.forEach(t=>{ if(t.dataset.store===storeId){ t.textContent = t.dataset.name + (done>0?' ('+done+'/'+total+')':''); } });
 }
 
 function showAnalysis(data){
-  if(!data || !data.stores) { toast('Erro: resposta inválida da análise'); return; }
+  if(!data || !data.stores) { toast('Erro: resposta invalida da analise'); return; }
   analysisChecked = {};
   const aSaving = document.getElementById('a-saving');
   const aAnnual = document.getElementById('a-annual');
-  const aDate = document.getElementById('analysis-date');
   const aPromos = document.getElementById('a-promos');
   const tabsEl = document.getElementById('a-tabs');
   const panelsEl = document.getElementById('a-panels');
-  if(!aSaving||!tabsEl||!panelsEl){ toast('Erro: elementos não encontrados'); return; }
+  if(!aSaving||!tabsEl||!panelsEl){ toast('Erro: elementos nao encontrados'); return; }
   aSaving.textContent=data.saving_weekly?Math.round(data.saving_weekly)+'€':'—';
   if(aAnnual) aAnnual.textContent=data.saving_annual?Math.round(data.saving_annual).toLocaleString('pt')+'€ poupanca anual vs Mercadona':'';
   if(aPromos) aPromos.innerHTML=(data.promos||[]).map((p,i)=>`<div class="promo-pill${i<2?' hot':''}">${p}</div>`).join('');
@@ -850,7 +836,6 @@ function showAnalysis(data){
     }
     panelsEl.appendChild(panel);
   });
-  // Save to Firebase and set as active cart
   cartData = data;
   cartChecked = {};
   const saveTs = Date.now();
@@ -859,7 +844,6 @@ function showAnalysis(data){
     window.fbAnalysisRef.set({data, ts: saveTs, checked: {}}).catch(()=>{});
   }
   updateCartBadge();
-
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
@@ -867,20 +851,16 @@ function showAnalysis(data){
 function toggleAnalysisItem(storeId, key, chk, itemName){
   const row = document.getElementById('pr-'+key);
   if(row) row.className = 'price-row' + (chk.checked ? ' bought' : '');
-  
   cartChecked[key] = chk.checked;
-  
   if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
     const ts = Date.now();
     window._setMyLastSaveTs(ts);
     window.fbAnalysisRef.set({data: cartData, ts, checked: cartChecked}).catch(()=>{});
   }
-
   updateStoreProgress(storeId);
   updateCartBadge();
 }
 
-// Expose to global scope for inline handlers
 window.toggleChk=toggleChk; window.toggleAnalysisItem=toggleAnalysisItem; window.showAnalysis=showAnalysis;
 window.openCart=openCart; window.closeCart=closeCart; window.clearCart=clearCart; window.toggleCartItem=toggleCartItem; window.chgQ=chgQ; window.addItem=addItem;
 window.setFilter=setFilter; window.onSearch=onSearch;
@@ -888,15 +868,11 @@ window.doClear=doClear; window.doMarkAll=doMarkAll; window.doReset=doReset; wind
 window.openMenu=openMenu; window.closeMenu=closeMenu; window.goBack=goBack; window.doAnalyze=doAnalyze;
 window.toast=toast;
 
-// ── CART (analysis saved as active shopping list) ──
-
 function openCart(){
   if(!cartData){ toast('Ainda nao ha lista — gera uma analise primeiro'); return; }
-  // Se o ecrã de análise estiver vazio (ex: após reload da página), reconstrói o DOM
   const tabsEl = document.getElementById('a-tabs');
   if(tabsEl && !tabsEl.children.length){
-    showAnalysis(cartData); // reconstrói e navega automaticamente
-    // Restaurar checkboxes do estado guardado
+    showAnalysis(cartData);
     setTimeout(()=>{
       Object.entries(cartChecked).forEach(([key, checked])=>{
         if(!checked) return;
@@ -940,15 +916,10 @@ function updateCartBadge(){
   if(lbl) lbl.textContent = total > 0 ? (done > 0 ? done+'/'+total+' comprados' : 'ver carrinho') : 'carrinho';
 }
 
-function renderCart(){
-  if(!cartData){ return; }
-}
+function renderCart(){ if(!cartData){ return; } }
+function toggleCartItem(storeId, key, chk, itemName){ toggleAnalysisItem(storeId, key, chk, itemName); }
 
-function toggleCartItem(storeId, key, chk, itemName){
-  toggleAnalysisItem(storeId, key, chk, itemName);
-}
-
-// ── BOOT ── render immediately, then try Firebase
+// ── BOOT ──
 initLocal();
 render();
 setDot('busy','a ligar…');
