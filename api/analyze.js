@@ -11,80 +11,59 @@ export default async function handler(req, res) {
   const { list } = req.body || {};
   if (!list) return res.status(400).json({ error: 'Campo list em falta' });
 
-  const prompt = `Analisa esta lista de compras para uma familia portuguesa de 4 pessoas (2 adultos + 2 criancas de 4 e 6 anos) em Lisboa/Matosinhos e distribui os produtos pelos supermercados mais baratos: LIDL, Pingo Doce e ALDI.
+  const prompt = `Analisa esta lista de compras para uma familia portuguesa de 4 pessoas (2 adultos + 2 criancas de 4 e 6 anos) em Lisboa/Matosinhos.
 
-ESTRATEGIA DE COMPRAS DESTA FAMILIA:
-- LIDL: conservas, basicos (arroz, massa), carnes, laticinios, snacks, limpeza, higiene, congelados, peixe congelado
-- Pingo Doce: frescos (legumes, frutas ao kg), padaria, peixe fresco, carnes frescas premium
-- ALDI: alternativa ao LIDL quando ha promocoes melhores
-- Actualmente gastam 227€/semana no Mercadona — objetivo e poupar ~70€/semana
+TAREFA:
+1. Pesquisa os precos ATUAIS de cada produto nas lojas portuguesas (LIDL, Pingo Doce, ALDI)
+2. Verifica se ha promocoes, cupoes ou descontos ativos esta semana em cada loja
+3. Distribui cada produto pela loja com melhor preco/promocao neste momento
+4. Calcula a poupanca vs Mercadona (referencia: 227 euros/semana)
 
-PRECOS REAIS DESTA FAMILIA (obtidos dos recibos de maio 2026 — usa estes como base):
+NOMES DOS PRODUTOS NOS RECIBOS DESTA FAMILIA (usa estes nomes exatos para pesquisar precos atuais):
+- Atum ao natural 120g → pesquisa "atum natural LIDL" / "atum natural Pingo Doce"
+- Arroz agulha → pesquisa "arroz agulha LIDL embalagem familiar"
+- Queijo flamengo fatiado → pesquisa "queijo flamengo fatiado LIDL"
+- Pescada congelada → pesquisa "MSC lombos pescada LIDL"
+- Gelados → pesquisa "gelado Double Bilionario LIDL" / "gelado Space Runners LIDL"
+- Legumes congelados → pesquisa "mistura legumes chinesa LIDL" / "mistura mexicana LIDL"
+- Espinafres → pesquisa "espinafres LIDL"
+- Mirtilos → pesquisa "mirtilos 500g LIDL"
+- Iogurte grego → pesquisa "iogurte grego natural LIDL"
+- Iogurte com proteina → pesquisa "iogurte proteina pack LIDL"
+- Natas culinaria → pesquisa "natas culinaria 200ml LIDL"
+- Salmao fresco → pesquisa "salmao posta LIDL fresco preco"
+- Bife vaca → pesquisa "bife novilho angus Pingo Doce preco"
+- Hamburguer vaca → pesquisa "hamburguer novilho angus 400g Pingo Doce"
+- Frango → pesquisa "pernas frango Pingo Doce" / "peito frango Pingo Doce preco"
+- Peixe fresco → pesquisa "robalo fresco Pingo Doce preco kg"
+- Morangos → pesquisa "morango 500g Pingo Doce preco"
+- Kiwi → pesquisa "kiwi sungold zespri Pingo Doce"
+- Cenoura → pesquisa "cenoura granel Pingo Doce kg preco"
+- Maca → pesquisa "maca gala Pingo Doce kg preco"
+- Broculos → pesquisa "broculos Pingo Doce kg preco"
+- Courgette → pesquisa "curgete Pingo Doce kg preco"
+- Abobora → pesquisa "abobora manteiga Pingo Doce preco"
+- Uvas → pesquisa "uva honey bran Pingo Doce"
+- Ovos → pesquisa "ovos 12 Pingo Doce preco" / "ovos 12 LIDL preco"
+- Bolachas digestive → pesquisa "bolachas digestive Pingo Doce 400g preco"
+- Mel → pesquisa "mel floral LIDL preco"
+- Papel cozinha → pesquisa "rolo cozinha LIDL preco"
 
-LIDL:
-- Atum ao natural 120g: 0,79€/lata
-- Arroz agulha emb familiar: 2,15€
-- Queijo flamengo fatiado: 3,99€/emb
-- MSC Lombos de Pescada (congelada): 9,69€/emb
-- Gelado Double Bilionario: 3,49€
-- Gelado Space Runners: 2,69€
-- Mistura legumes chinesa (congelada): 0,99€/emb
-- Mistura legumes mexicana (congelada): 2,99€/emb
-- Espinafres frescos: 1,15€/emb
-- Mirtilos 500g: 6,59€ (promo Lidl Plus por vezes gratuito)
-- Iogurte grego natural: 1,75€/emb
-- Iogurte com proteina Pack8: 3,29€
-- Natas para culinaria 200ml: 0,79€/uni
-- Mel floral: 5,29€
-- Rolo de cozinha 2 folhas: 0,79€
-- Salmao posta fresco: 17,99€/kg
-
-PINGO DOCE:
-- Robalo fresco 200/600g: 9,99€/kg
-- Hamburguer Novilho Angus 400g: 6,98€/emb
-- Bife Novilho Angus: 30,48€/kg
-- Peito frango: ~7,99€/kg
-- Pernas de frango churra: 8,49€/kg
-- Morango emb 500g: 2,99€ (promo imediata -1,00€ frequente = 1,99€ efetivo)
-- Kiwi Sungold Zespri: 3,99€/emb
-- Cenoura granel: 1,09€/kg
-- Maca Gala: 1,99€/kg
-- Broculos: 2,99€/kg
-- Uva Honey Bran 700g: 4,49€
-- Uva Red Globe: 3,99€/kg
-- Curgete: 1,99€/kg
-- Abobora manteiga: 1,79€/kg
-- Petit Filous 6x100g: 1,19€
-- Natas UHT PD 200ml: 0,83€
-- Bolachas Digestive 400g: 0,99€
-- Bolachas Aveia 300g: 1,09€
-- Ovos M/L matinado 12u: 4,59€
-- Queijo Babybel 12x20g: 4,79€
-- Queijo Vaca que ri 16T: 3,49€
-
-MERCADONA (para produtos especificos):
-- L'Casei Morango (iogurte liquido): 2,55€
-- Muesli frutos secos: 2,10€
-- Barritas aveia cacao: 1,65€
-- Snack queijo de vaca: 3,15€
-- Barra Muesli Choc: 1,55€
-- Ovos 12 ar livre: 3,55€
+ESTRATEGIA DE DISTRIBUICAO:
+- LIDL: conservas, basicos, carnes, laticinios, snacks, limpeza, higiene, congelados, peixe congelado
+- Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes premium
+- ALDI: alternativa quando tem melhor preco que LIDL esta semana
 
 INSTRUCOES:
-1. Para produtos com preco real acima, usa esse preco (ou muito proximo)
-2. Para produtos sem preco de referencia, estima com base em marcas proprias portuguesas de 2025
-3. Aplica promocoes reais conhecidas (ex: Pingo Doce "Poupa Mais", Lidl Plus)
-4. O campo "promo" so deve ser preenchido se ha uma promocao concreta conhecida (ex: "-20% esta semana", "Pack 2x1", "Promo Lidl Plus")
-5. Nao inventes promocoes — deixa "promo": "" se nao tiveres a certeza
-6. Distribui cada produto pela loja mais barata de acordo com a estrategia desta familia
+- Usa os precos ATUAIS encontrados na pesquisa, nunca estimativas desatualizadas
+- Se encontrares promocao ou cupao ativo esta semana, indica no campo "promo" (ex: "Lidl Plus gratis", "-30% esta semana", "2 por 1", "Poupa Mais -20%")
+- Deixa "promo": "" se nao ha promocao confirmada neste momento
+- Se nao encontrares preco atual para um produto especifico, estima com base em precos de marcas proprias portuguesas atuais
 
 Responde APENAS com JSON valido (sem markdown, sem texto antes ou depois):
 {
   "semana": "Mai 2026",
-  "promos": [
-    "LIDL: Mirtilos 500g gratis com Lidl Plus",
-    "Pingo Doce: Morango 500g 1,99€ (promo imediata -1€)"
-  ],
+  "promos": ["LIDL: Mirtilos 500g gratis com Lidl Plus", "Pingo Doce: Morango 500g poupanca imediata -1euro"],
   "stores": [
     {
       "id": "lidl",
@@ -136,7 +115,14 @@ ${list}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 5000,
+        tools: [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: 8
+          }
+        ],
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -147,10 +133,17 @@ ${list}`;
     }
 
     const data = await response.json();
-    const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
+
+    // Extrair apenas blocos de texto (web_search devolve blocos mistos)
+    const text = (data.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
     const clean = text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     return res.status(200).json(parsed);
+
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
