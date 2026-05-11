@@ -310,6 +310,7 @@ svg{display:block}
 
 <div class="toast" id="toast"></div>
 
+<!-- Firebase compat SDK (more reliable than ESM) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -318,7 +319,7 @@ svg{display:block}
 // ── App state ──
 const CATS = [
   {id:'conservas',name:'Conservas',color:'#c45f2e',items:[
-    {n:'Atum ao natural 120g',q:3,u:'latas',note:'Marca branca'},
+    {n:'Atum ao natural 120g',q:3,u:'latas',note:'LIDL 0,79€/lata'},
     {n:'Atum em azeite 120g',q:1,u:'latas',note:''},
     {n:'Feijao encarnado 400g',q:2,u:'latas',note:''},
     {n:'Feijao manteiga 400g',q:1,u:'latas',note:''},
@@ -331,88 +332,93 @@ const CATS = [
     {n:'Milho em lata',q:1,u:'latas',note:''},
   ]},
   {id:'legumes',name:'Frescos — Legumes',color:'#2d9a5c',items:[
-    {n:'Abobora manteiga',q:1,u:'uni',note:'Boa para pure'},
+    {n:'Abobora manteiga',q:1,u:'emb',note:'PD 1,79€/kg'},
     {n:'Alface',q:1,u:'uni',note:''},
     {n:'Alho (cabecas)',q:2,u:'uni',note:''},
     {n:'Batata nova/baby',q:0,u:'emb',note:''},
-    {n:'Batata para assar',q:1,u:'kg',note:'Tipo Rocha'},
-    {n:'Batata para cozer',q:1,u:'kg',note:'Textura suave'},
-    {n:'Broculos',q:1,u:'uni',note:''},
+    {n:'Batata para assar',q:1,u:'kg',note:''},
+    {n:'Batata para cozer',q:1,u:'kg',note:''},
+    {n:'Broculos',q:1,u:'kg',note:'PD 2,99€/kg'},
     {n:'Cebola',q:1,u:'kg',note:''},
-    {n:'Cenoura',q:1,u:'kg',note:''},
+    {n:'Cenoura',q:1,u:'kg',note:'PD granel 1,09€/kg'},
     {n:'Cenoura baby',q:1,u:'emb',note:'Snack criancas'},
     {n:'Cogumelos brancos 250g',q:1,u:'emb',note:''},
-    {n:'Courgette',q:2,u:'uni',note:''},
+    {n:'Courgette',q:2,u:'kg',note:'PD 1,99€/kg'},
     {n:'Couve portuguesa',q:1,u:'uni',note:'Para sopa'},
-    {n:'Espinafres',q:1,u:'emb',note:''},
+    {n:'Espinafres',q:1,u:'emb',note:'LIDL 1,15€'},
     {n:'Pepino',q:1,u:'uni',note:''},
     {n:'Pimento vermelho',q:1,u:'uni',note:''},
     {n:'Tomate cherry',q:1,u:'emb',note:''},
   ]},
   {id:'frutas',name:'Frescos — Frutas',color:'#f4a261',items:[
+    {n:'Ameixa',q:0,u:'emb',note:'LIDL ~0,99€'},
     {n:'Banana',q:1,u:'kg',note:''},
-    {n:'Kiwi',q:3,u:'uni',note:'Vitamina C'},
+    {n:'Kiwi Sungold Zespri',q:1,u:'emb',note:'PD 3,99€/emb'},
     {n:'Laranja',q:1,u:'kg',note:''},
-    {n:'Maca golden',q:1,u:'kg',note:'Lanche criancas'},
-    {n:'Maca granny smith',q:0,u:'kg',note:'Adultos'},
+    {n:'Maca Gala',q:1,u:'kg',note:'PD 1,99€/kg'},
+    {n:'Maca Granny Smith',q:0,u:'kg',note:''},
     {n:'Melao',q:0,u:'uni',note:'Verao'},
-    {n:'Morangos',q:0,u:'emb',note:'Primavera'},
+    {n:'Mirtilos 500g',q:0,u:'emb',note:'LIDL 6,59€'},
+    {n:'Morangos 500g',q:1,u:'emb',note:'PD 2,99€ (promo -1€ freq)'},
     {n:'Pera rocha',q:1,u:'kg',note:''},
-    {n:'Uvas',q:0,u:'emb',note:''},
+    {n:'Uvas Honey Bran 700g',q:0,u:'emb',note:'PD 4,49€'},
   ]},
   {id:'carnes',name:'Carnes e Peixe',color:'#a83232',items:[
-    {n:'Bife de vaca',q:1,u:'kg',note:'Para grelhar'},
-    {n:'Camarao congelado',q:0,u:'emb',note:'Arroz de marisco'},
+    {n:'Bife Novilho Angus',q:1,u:'kg',note:'PD 30,48€/kg'},
     {n:'Carne picada de vaca',q:0,u:'kg',note:'Bolonhesa'},
     {n:'Coxas de frango',q:0,u:'kg',note:'Com osso'},
     {n:'Entrecosto de porco',q:0,u:'kg',note:''},
     {n:'Frango inteiro',q:0,u:'uni',note:'Fim de semana'},
+    {n:'Hamburguer Novilho Angus 400g',q:0,u:'emb',note:'PD 6,98€/emb'},
     {n:'Lombo de porco',q:1,u:'kg',note:'Para assar'},
+    {n:'Pernas de frango',q:0,u:'kg',note:'PD churra 8,49€/kg'},
     {n:'Peito de frango',q:1,u:'kg',note:'Para grelhar'},
-    {n:'Salmao (posta)',q:0,u:'uni',note:''},
+    {n:'Robalo fresco',q:0,u:'kg',note:'PD 9,99€/kg'},
+    {n:'Salmao posta',q:0,u:'kg',note:'LIDL fresco 17,99€/kg'},
     {n:'Salsichas de frango',q:1,u:'emb',note:'Criancas'},
-    {n:'Sardinhas frescas',q:0,u:'kg',note:'Epoca junho/julho'},
+    {n:'Sardinhas frescas',q:0,u:'kg',note:'Junho/julho'},
   ]},
   {id:'congelados',name:'Congelados',color:'#0096c7',items:[
-    {n:'Broculos congelados',q:0,u:'emb',note:''},
-    {n:'Esparguete de legumes congelado',q:0,u:'emb',note:''},
-    {n:'Gelados variados',q:1,u:'emb',note:'Para as criancas'},
-    {n:'Hamburguer de frango',q:0,u:'emb',note:''},
-    {n:'Legumes mistos congelados',q:0,u:'emb',note:''},
+    {n:'Gelado Double Bilionario',q:1,u:'emb',note:'LIDL 3,49€'},
+    {n:'Gelado Space Runners',q:1,u:'emb',note:'LIDL 2,69€'},
+    {n:'Mistura legumes chinesa',q:1,u:'emb',note:'LIDL 0,99€'},
+    {n:'Mistura legumes mexicana',q:0,u:'emb',note:'LIDL 2,99€'},
     {n:'Peixe variado congelado',q:0,u:'emb',note:''},
-    {n:'Pescada congelada (redondos)',q:1,u:'emb',note:'485g tipo Hacendado'},
+    {n:'Pescada lombos MSC',q:1,u:'emb',note:'LIDL 9,69€'},
     {n:'Batata frita congelada',q:0,u:'emb',note:''},
     {n:'Ervilhas congeladas',q:0,u:'emb',note:''},
   ]},
   {id:'laticinios',name:'Laticinios e Ovos',color:'#1a82b5',items:[
-    {n:'Iogurte natural',q:2,u:'emb 4x',note:'Sem acucar'},
-    {n:'Iogurte para criancas',q:1,u:'emb',note:''},
+    {n:'Iogurte grego natural',q:2,u:'emb',note:'LIDL 1,75€'},
+    {n:'Iogurte com proteina Pack8',q:0,u:'emb',note:'LIDL 3,29€'},
+    {n:'Iogurte para criancas',q:1,u:'emb',note:'Mercadona L\'Casei 2,55€'},
     {n:'Leite meio gordo',q:4,u:'L',note:''},
     {n:'Leite magro',q:0,u:'L',note:''},
     {n:'Manteiga s/ sal',q:1,u:'emb',note:''},
-    {n:'Natas para culinaria',q:1,u:'emb',note:''},
-    {n:'Ovos L (12 und)',q:1,u:'duzia',note:''},
-    {n:'Queijo flamengo fatiado',q:1,u:'emb',note:''},
+    {n:'Natas para culinaria 200ml',q:3,u:'emb',note:'LIDL 0,79€/uni'},
+    {n:'Ovos M/L 12 unidades',q:1,u:'duzia',note:'Mercadona ar livre 3,55€ / PD matinado 4,59€'},
+    {n:'Queijo Babybel 12x20g',q:0,u:'emb',note:'PD 4,79€'},
+    {n:'Queijo flamengo fatiado',q:1,u:'emb',note:'LIDL 3,99€'},
     {n:'Queijo parmesao ralado',q:1,u:'emb',note:'Para massas'},
+    {n:'Queijo Vaca que ri 16T',q:0,u:'emb',note:'PD 3,49€'},
     {n:'Requeijao',q:2,u:'uni',note:''},
   ]},
   {id:'snacks',name:'Snacks e Pequeno-almoco',color:'#7b4fa6',items:[
-    {n:'Barras de cereais',q:1,u:'emb',note:'Lanche escolar'},
-    {n:'Bolachas Maria',q:1,u:'emb',note:''},
+    {n:'Barritas aveia cacao',q:2,u:'emb',note:'Mercadona 1,65€'},
+    {n:'Barra Muesli Choc',q:2,u:'emb',note:'Mercadona 1,55€'},
+    {n:'Bolachas Digestive 400g',q:1,u:'emb',note:'PD 0,99€'},
+    {n:'Bolachas Aveia 300g',q:1,u:'emb',note:'PD 1,09€'},
     {n:'Bolachas de arroz',q:1,u:'emb',note:''},
-    {n:'Bolachas integrais',q:1,u:'emb',note:''},
     {n:'Cereais criancas',q:1,u:'emb',note:''},
-    {n:'Cereais integrais adultos',q:1,u:'emb',note:'Muesli'},
-    {n:'Chocolate de leite',q:1,u:'tablete',note:''},
-    {n:'Chocolate negro 70%',q:1,u:'tablete',note:''},
     {n:'Flocos de aveia finos',q:1,u:'emb',note:''},
-    {n:'Frutos secos mistos',q:1,u:'emb',note:''},
+    {n:'Frutos secos mistos',q:1,u:'emb',note:'Mercadona Muesli 2,10€'},
+    {n:'Mel floral',q:0,u:'frasco',note:'LIDL 5,29€'},
+    {n:'Snack Queijo de Vaca',q:1,u:'emb',note:'Mercadona 3,15€'},
   ]},
   {id:'basicos',name:'Basicos e Despensa',color:'#8a6d2f',items:[
     {n:'Acucar branco',q:0,u:'kg',note:''},
-    {n:'Arroz agulha',q:2,u:'kg',note:''},
+    {n:'Arroz agulha emb familiar',q:1,u:'emb',note:'LIDL 2,15€'},
     {n:'Arroz carolino',q:0,u:'kg',note:''},
-    {n:'Arroz integral',q:0,u:'kg',note:''},
     {n:'Azeite virgem extra',q:1,u:'L',note:''},
     {n:'Caldo de galinha (cubos)',q:1,u:'emb',note:''},
     {n:'Farinha tipo 55',q:0,u:'kg',note:''},
@@ -420,7 +426,6 @@ const CATS = [
     {n:'Massa esparguete n.5',q:2,u:'emb',note:''},
     {n:'Massa fusilli',q:1,u:'emb',note:''},
     {n:'Massa penne',q:1,u:'emb',note:''},
-    {n:'Mel',q:0,u:'frasco',note:''},
     {n:'Sal fino',q:0,u:'kg',note:''},
   ]},
   {id:'padaria',name:'Padaria',color:'#b07d3a',items:[
@@ -432,7 +437,7 @@ const CATS = [
     {n:'Detergente loica manual',q:1,u:'uni',note:''},
     {n:'Detergente roupa liquido',q:1,u:'uni',note:'30+ lavagens'},
     {n:'Esponjas de cozinha',q:0,u:'emb',note:''},
-    {n:'Papel de cozinha',q:1,u:'rolos',note:''},
+    {n:'Papel de cozinha 2 folhas',q:1,u:'rolo',note:'LIDL 0,79€'},
     {n:'Papel higienico',q:0,u:'emb',note:''},
     {n:'Sacos do lixo 30L',q:0,u:'rolo',note:''},
     {n:'Sacos do lixo 50L',q:0,u:'rolo',note:''},
@@ -440,6 +445,7 @@ const CATS = [
   {id:'higiene',name:'Higiene',color:'#5a5a9a',items:[
     {n:'Champoo adultos',q:0,u:'uni',note:''},
     {n:'Champoo criancas',q:0,u:'uni',note:''},
+    {n:'Desodorizante',q:0,u:'uni',note:''},
     {n:'Gel banho adultos',q:0,u:'uni',note:''},
     {n:'Gel banho criancas',q:0,u:'uni',note:''},
     {n:'Lencos humedecidos',q:1,u:'emb',note:''},
@@ -454,8 +460,9 @@ let cartData = null, cartChecked = {};
 let filter = 'all', search = '', saveTimer = null;
 let fbReady = false, fbDb = null, fbRef = null;
 
-let _clearedAt = 0;
-let _lastInteractionAt = 0;
+// ── Clear tracking: encoded in data, not time-based ──
+let _clearedAt = 0;        // timestamp of last clear operation
+let _lastInteractionAt = 0; // timestamp of last item check/uncheck
 
 function defaultState(){
   const s={};
@@ -463,12 +470,14 @@ function defaultState(){
   return s;
 }
 
+// ── Render immediately with localStorage or defaults ──
 function initLocal(){
   try{
     const sv = localStorage.getItem('lista-local');
     if(sv){
       const d=JSON.parse(sv);
       if(d&&d.S){
+        // Merge with defaults to pick up new categories
         const merged = defaultState();
         Object.keys(d.S).forEach(catId => {
           if(merged[catId]){
@@ -491,6 +500,7 @@ function saveLocal(){
   try{ localStorage.setItem('lista-local', JSON.stringify({S, open:[...openCats]})); }catch(e){}
 }
 
+// ── Firebase (optional, secondary) ──
 function initFirebase(){
   try{
     const fbApp = firebase.initializeApp({
@@ -506,12 +516,13 @@ function initFirebase(){
     fbRef = fbDb.ref('lista-v2');
     window.fbAnalysisRef = fbDb.ref('analysis-v1');
 
+    // ── Autenticação anónima — obrigatória para aceder à base de dados ──
     firebase.auth().signInAnonymously()
       .catch(err => { console.warn('Auth falhou:', err); setDot('err','sem auth'); });
 
     firebase.auth().onAuthStateChanged(user => {
-      if(!user) return;
-      if(fbReady) return;
+      if(!user) return; // aguarda login anónimo
+      if(fbReady) return; // já inicializado, evita registar listeners duplicados
     let myLastSaveTs = 0;
     window._setMyLastSaveTs = (ts) => { myLastSaveTs = ts; };
     window.fbAnalysisRef.on('value', snap=>{
@@ -535,13 +546,14 @@ function initFirebase(){
             merged[catId].sort((a,b)=>a.n.localeCompare(b.n,'pt'));
           }
         });
+        // ── Sync clear/interaction timestamps from Firebase ──
         const fbClearedAt = v.clearedAt || 0;
         const fbLastInteractionAt = v.lastInteractionAt || 0;
         if(fbClearedAt > _clearedAt) _clearedAt = fbClearedAt;
         if(fbLastInteractionAt > _lastInteractionAt) _lastInteractionAt = fbLastInteractionAt;
-        // Se limpou mais recentemente que a última interação → forçar q=0 e c=false em tudo
+        // If cleared more recently than last interaction → force uncheck all
         if(_clearedAt > _lastInteractionAt){
-          Object.keys(merged).forEach(catId => merged[catId].forEach(i => { i.c = false; i.q = 0; }));
+          Object.keys(merged).forEach(catId => merged[catId].forEach(i => i.c = false));
         }
         S = merged;
         if(v.open) openCats = new Set(v.open);
@@ -584,6 +596,7 @@ function setDot(cls,txt){
   document.getElementById('stxt').textContent=txt;
 }
 
+// ── Render ──
 function render(){
   const el=document.getElementById('cats'); el.innerHTML=''; let any=false;
   CATS.forEach(cat=>{
@@ -603,6 +616,7 @@ function render(){
     <div class="cat-body" style="display:${isO?'block':'none'}">
       ${vis.map(it=>{
         const i=items.indexOf(it);
+        const isCustom = !CATS.find(c=>c.id===cat.id)?.items.find(def=>def.n.toLowerCase().trim()===it.n.toLowerCase().trim());
         return `<div class="prod${it.c?' done':''}" id="p-${cat.id}-${i}">
           <input type="checkbox" class="prod-chk" ${it.c?'checked':''} onchange="toggleChk('${cat.id}',${i},this.checked)">
           <div class="prod-info">
@@ -628,7 +642,7 @@ function render(){
   });
   if(!any) el.innerHTML=`<div class="empty-state"><div class="empty-icon">&#128722;</div><div class="empty-text">Nenhum produto encontrado</div></div>`;
   updateStats();
-  updateCartBadge();
+  updateCartBadge(); // Always refresh cart badge after render
 }
 
 function toggleCat(id,card){
@@ -641,7 +655,7 @@ function toggleCat(id,card){
 }
 
 function toggleChk(cat,i,v){
-  _lastInteractionAt = Date.now();
+  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   S[cat][i].c=v;
   const r=document.getElementById('p-'+cat+'-'+i);
   if(r){r.className='prod'+(v?' done':'');r.querySelector('.prod-name').className='prod-name'+(v?' done':'');}
@@ -649,7 +663,6 @@ function toggleChk(cat,i,v){
 }
 
 function chgQ(cat,i,d){
-  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   const nv=Math.max(0,(S[cat][i].q||0)+d); S[cat][i].q=nv;
   const el=document.getElementById('qv-'+cat+'-'+i); if(el)el.textContent=nv;
   updateStats(); saveAll();
@@ -662,10 +675,10 @@ function delItem(cat,i){
 }
 
 function addItem(inp){
-  _lastInteractionAt = Date.now(); // regista interação — anula efeito do clear
   const n=inp.value.trim(); if(!n)return;
   const cat=inp.dataset.cat; if(!S[cat])S[cat]=[];
   S[cat].push({n,q:1,u:'uni',note:'',c:false});
+  // Sort alphabetically after adding, keeping checked items at bottom
   S[cat].sort((a,b)=>{
     if(a.c && !b.c) return 1;
     if(!a.c && b.c) return -1;
@@ -678,22 +691,18 @@ function updateStats(){
   let tot=0,left=0;
   CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{if(i.q>0){tot++;if(!i.c)left++;}});});
   document.getElementById('s-tot').textContent=tot;
+  // s-chk is managed exclusively by updateCartBadge()
   document.getElementById('s-left').textContent=left;
 }
 
 function setFilter(f,btn){ filter=f; document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); render(); }
 function onSearch(q){ search=q.toLowerCase(); render(); }
 
-// ══════════════════════════════════════════════
-// FIX: doClear agora zera quantidades (i.q=0)
-// e desmarca checkboxes (i.c=false)
-// ══════════════════════════════════════════════
+// ── doClear: usa clearedAt nos dados em vez de guard temporal ──
 function doClear(){
-  if(!confirm('Limpar toda a lista? Quantidades voltam a zero e tudo fica desmarcado.')) return;
   _clearedAt = Date.now();
   _lastInteractionAt = 0;
-  // ← CORREÇÃO: i.q=0 além de i.c=false
-  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>{ i.c=false; i.q=0; });});
+  CATS.forEach(c=>{(S[c.id]||[]).forEach(i=>i.c=false);});
   render();
   saveLocal();
   if(fbReady && fbRef){
@@ -703,19 +712,23 @@ function doClear(){
       .then(()=>setDot('','sincronizado'))
       .catch(()=>setDot('err','offline'));
   }
-  toast('Lista limpa — pronto para nova semana! ✓');
+  closeMenu();
+  toast('Carrinho limpo ✓');
 }
 
 function doMarkAll(){ CATS.forEach(c=>{(S[c.id]||[]).filter(i=>i.q>0).forEach(i=>i.c=true);}); render(); saveAll(); toast('Tudo marcado'); }
 
+// ── BUG FIX 2: doReset — mantém produtos adicionados, repoe apenas os da lista padrao ──
 function doReset(){
   if(!confirm('Repor quantidades para os valores padrao?\nOs produtos que adicionaste ficam na lista.'))return;
   const def = defaultState();
   CATS.forEach(cat => {
     const defNames = new Set(def[cat.id].map(i=>i.n.toLowerCase().trim()));
+    // Guardar produtos personalizados (nao existem nos defaults)
     const customItems = (S[cat.id]||[])
       .filter(i => !defNames.has(i.n.toLowerCase().trim()))
       .map(i => ({...i, c: false}));
+    // Repor produtos default com quantidades padrao, desmarcar tudo
     S[cat.id] = [...def[cat.id], ...customItems];
     S[cat.id].sort((a,b) => a.n.localeCompare(b.n, 'pt'));
   });
@@ -745,13 +758,14 @@ function goBack(){
 let toastT;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
 
+// ── Analysis ──
 let stepTimer;
 function animateSteps(){ const s=['ls1','ls2','ls3']; let i=0; s.forEach(id=>document.getElementById(id)?.classList.remove('active')); document.getElementById('ls1').classList.add('active'); stepTimer=setInterval(()=>{i++;if(i<s.length){s.forEach(id=>document.getElementById(id)?.classList.remove('active'));document.getElementById(s[i])?.classList.add('active');}},4000); }
 
 async function doAnalyze(){
   const lines=[];
   CATS.forEach(cat=>{ const it=(S[cat.id]||[]).filter(i=>i.q>0); if(it.length) lines.push(cat.name+': '+it.map(i=>i.n+' x'+i.q+' '+i.u).join(', ')); });
-  if(!lines.length){ toast('A lista esta vazia — adiciona produtos primeiro'); return; }
+  if(!lines.length){ toast('A lista esta vazia'); return; }
   document.getElementById('loading').classList.add('show'); animateSteps();
   try{
     const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({list:lines.join('\n')})});
@@ -768,6 +782,7 @@ async function doAnalyze(){
   }
 }
 
+// Track checked state per analysis session
 let analysisChecked = {};
 
 function updateStoreProgress(storeId){
@@ -782,19 +797,21 @@ function updateStoreProgress(storeId){
   const txt = panel.querySelector('.store-progress-text');
   if(bar) bar.style.width = pct+'%';
   if(txt) txt.textContent = done+'/'+total+' produtos';
+  // Update tab badge
   const tabs = document.querySelectorAll('.stab');
   tabs.forEach(t=>{ if(t.dataset.store===storeId){ t.textContent = t.dataset.name + (done>0?' ('+done+'/'+total+')':''); } });
 }
 
 function showAnalysis(data){
-  if(!data || !data.stores) { toast('Erro: resposta invalida da analise'); return; }
+  if(!data || !data.stores) { toast('Erro: resposta inválida da análise'); return; }
   analysisChecked = {};
   const aSaving = document.getElementById('a-saving');
   const aAnnual = document.getElementById('a-annual');
+  const aDate = document.getElementById('analysis-date');
   const aPromos = document.getElementById('a-promos');
   const tabsEl = document.getElementById('a-tabs');
   const panelsEl = document.getElementById('a-panels');
-  if(!aSaving||!tabsEl||!panelsEl){ toast('Erro: elementos nao encontrados'); return; }
+  if(!aSaving||!tabsEl||!panelsEl){ toast('Erro: elementos não encontrados'); return; }
   aSaving.textContent=data.saving_weekly?Math.round(data.saving_weekly)+'€':'—';
   if(aAnnual) aAnnual.textContent=data.saving_annual?Math.round(data.saving_annual).toLocaleString('pt')+'€ poupanca anual vs Mercadona':'';
   if(aPromos) aPromos.innerHTML=(data.promos||[]).map((p,i)=>`<div class="promo-pill${i<2?' hot':''}">${p}</div>`).join('');
@@ -838,6 +855,7 @@ function showAnalysis(data){
     }
     panelsEl.appendChild(panel);
   });
+  // Save to Firebase and set as active cart
   cartData = data;
   cartChecked = {};
   const saveTs = Date.now();
@@ -846,6 +864,7 @@ function showAnalysis(data){
     window.fbAnalysisRef.set({data, ts: saveTs, checked: {}}).catch(()=>{});
   }
   updateCartBadge();
+
   document.getElementById('screen-list').classList.add('off');
   document.getElementById('screen-analysis').classList.remove('off');
 }
@@ -853,16 +872,20 @@ function showAnalysis(data){
 function toggleAnalysisItem(storeId, key, chk, itemName){
   const row = document.getElementById('pr-'+key);
   if(row) row.className = 'price-row' + (chk.checked ? ' bought' : '');
+  
   cartChecked[key] = chk.checked;
+  
   if(window.fbAnalysisRef && window._setMyLastSaveTs && cartData){
     const ts = Date.now();
     window._setMyLastSaveTs(ts);
     window.fbAnalysisRef.set({data: cartData, ts, checked: cartChecked}).catch(()=>{});
   }
+
   updateStoreProgress(storeId);
   updateCartBadge();
 }
 
+// Expose to global scope for inline handlers
 window.toggleChk=toggleChk; window.toggleAnalysisItem=toggleAnalysisItem; window.showAnalysis=showAnalysis;
 window.openCart=openCart; window.closeCart=closeCart; window.clearCart=clearCart; window.toggleCartItem=toggleCartItem; window.chgQ=chgQ; window.addItem=addItem;
 window.setFilter=setFilter; window.onSearch=onSearch;
@@ -870,11 +893,15 @@ window.doClear=doClear; window.doMarkAll=doMarkAll; window.doReset=doReset; wind
 window.openMenu=openMenu; window.closeMenu=closeMenu; window.goBack=goBack; window.doAnalyze=doAnalyze;
 window.toast=toast;
 
+// ── CART (analysis saved as active shopping list) ──
+
 function openCart(){
   if(!cartData){ toast('Ainda nao ha lista — gera uma analise primeiro'); return; }
+  // Se o ecrã de análise estiver vazio (ex: após reload da página), reconstrói o DOM
   const tabsEl = document.getElementById('a-tabs');
   if(tabsEl && !tabsEl.children.length){
-    showAnalysis(cartData);
+    showAnalysis(cartData); // reconstrói e navega automaticamente
+    // Restaurar checkboxes do estado guardado
     setTimeout(()=>{
       Object.entries(cartChecked).forEach(([key, checked])=>{
         if(!checked) return;
@@ -918,10 +945,15 @@ function updateCartBadge(){
   if(lbl) lbl.textContent = total > 0 ? (done > 0 ? done+'/'+total+' comprados' : 'ver carrinho') : 'carrinho';
 }
 
-function renderCart(){ if(!cartData){ return; } }
-function toggleCartItem(storeId, key, chk, itemName){ toggleAnalysisItem(storeId, key, chk, itemName); }
+function renderCart(){
+  if(!cartData){ return; }
+}
 
-// ── BOOT ──
+function toggleCartItem(storeId, key, chk, itemName){
+  toggleAnalysisItem(storeId, key, chk, itemName);
+}
+
+// ── BOOT ── render immediately, then try Firebase
 initLocal();
 render();
 setDot('busy','a ligar…');
