@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   const month = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
  
   try {
-    // ── FASE 1: pesquisa web de preços reais (~15-25s) ──
+    // ── FASE 1: pesquisa web (~15-25s) ──
     const r1 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -25,23 +25,24 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        max_tokens: 1500,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
         messages: [{
           role: 'user',
-          content: `Pesquisa os precos ATUAIS em Portugal (${month}) nos supermercados LIDL, Pingo Doce e ALDI para estes produtos. Verifica promocoes ativas (Lidl Plus, Poupa Mais, etc). Responde com uma lista simples de produto: preco, loja, promocao se houver.
- 
-LISTA:
-${list}`
+          content: `Pesquisa precos atuais em Portugal (${month}) no LIDL, Pingo Doce e ALDI para estes produtos. Indica preco, loja e promocao se houver (Lidl Plus, Poupa Mais):\n\n${list}`
         }]
       })
     });
  
-    if (!r1.ok) throw new Error('Pesquisa falhou: ' + r1.status);
+    if (!r1.ok) {
+      const e = await r1.json().catch(() => ({}));
+      throw new Error('Pesquisa: ' + (e.error?.message || r1.status));
+    }
     const d1 = await r1.json();
-    const priceInfo = (d1.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    // Limitar a 2000 chars para nao exceder tokens na fase 2
+    const priceInfo = (d1.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').slice(0, 2000);
  
-    // ── FASE 2: formatar JSON com prefill garantido (~3-5s) ──
+    // ── FASE 2: formatar JSON com prefill { (~3-5s) ──
     const r2 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -55,37 +56,34 @@ ${list}`
         messages: [
           {
             role: 'user',
-            content: `Com base nestes precos pesquisados hoje em Portugal, distribui a lista pelos supermercados.
+            content: `Distribui esta lista de compras pelos supermercados com os precos encontrados. LIDL para basicos/laticinios/congelados, Pingo Doce para frescos/padaria/carnes, ALDI como alternativa.
  
-PRECOS ENCONTRADOS:
+Precos pesquisados:
 ${priceInfo}
  
-Estrategia:
-- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
-- Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
-- ALDI: alternativa quando tem melhor preco
+Lista original:
+${list}
  
-Formato do JSON de resposta:
-{"semana":"${month}","promos":["promo ativa se houver"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`
+Responde com JSON seguindo este formato exato:
+{"semana":"${month}","promos":[],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"produto","qty":1,"unit":"un","price":0.99,"promo":""}]}],"total":0},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":0},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":0}],"total_mix":0}`
           },
-          {
-            role: 'assistant',
-            content: '{"semana":"'
-          }
+          { role: 'assistant', content: '{' }
         ]
       })
     });
  
-    if (!r2.ok) throw new Error('Formatacao falhou: ' + r2.status);
+    if (!r2.ok) {
+      const e = await r2.json().catch(() => ({}));
+      throw new Error('Formatacao: ' + (e.error?.message || r2.status));
+    }
     const d2 = await r2.json();
-    const rawText = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    const txt = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
  
-    // Combinar prefill + resposta e extrair JSON completo
-    const full = '{"semana":"' + rawText;
-    const lastBrace = full.lastIndexOf('}');
-    if (lastBrace < 0) throw new Error('JSON incompleto na resposta');
-    const parsed = JSON.parse(full.slice(0, lastBrace + 1));
- 
+    // Combinar prefill '{' + resposta, cortar no ultimo }
+    const full = '{' + txt;
+    const last = full.lastIndexOf('}');
+    if (last < 0) throw new Error('JSON incompleto');
+    const parsed = JSON.parse(full.slice(0, last + 1));
     parsed.saving_weekly = 0;
     parsed.saving_annual = 0;
     return res.status(200).json(parsed);
