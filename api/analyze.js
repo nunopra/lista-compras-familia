@@ -13,9 +13,21 @@ export default async function handler(req, res) {
  
   const month = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
  
+  const prompt = `Pesquisa os precos atuais em Portugal (${month}) nos supermercados LIDL, Pingo Doce e ALDI para esta lista de compras. Verifica promocoes ativas (Lidl Plus, Poupa Mais, etc).
+ 
+Estrategia de distribuicao:
+- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
+- Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
+- ALDI: alternativa quando tem melhor preco
+ 
+LISTA:
+${list}
+ 
+Responde APENAS com o objeto JSON abaixo preenchido, sem texto antes ou depois:
+{"semana":"${month}","promos":["promocao ativa se houver"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`;
+ 
   try {
-    // ── FASE 1: pesquisa web (~15-25s) ──
-    const r1 = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -25,65 +37,26 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1500,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
-        messages: [{
-          role: 'user',
-          content: `Pesquisa precos atuais em Portugal (${month}) no LIDL, Pingo Doce e ALDI para estes produtos. Indica preco, loja e promocao se houver (Lidl Plus, Poupa Mais):\n\n${list}`
-        }]
+        max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        messages: [{ role: 'user', content: prompt }]
       })
     });
  
-    if (!r1.ok) {
-      const e = await r1.json().catch(() => ({}));
-      throw new Error('Pesquisa: ' + (e.error?.message || r1.status));
+    if (!response.ok) {
+      const e = await response.json().catch(() => ({}));
+      throw new Error(e.error?.message || 'Erro ' + response.status);
     }
-    const d1 = await r1.json();
-    // Limitar a 2000 chars para nao exceder tokens na fase 2
-    const priceInfo = (d1.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').slice(0, 2000);
  
-    // ── FASE 2: formatar JSON com prefill { (~3-5s) ──
-    const r2 = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 3000,
-        messages: [
-          {
-            role: 'user',
-            content: `Distribui esta lista de compras pelos supermercados com os precos encontrados. LIDL para basicos/laticinios/congelados, Pingo Doce para frescos/padaria/carnes, ALDI como alternativa.
+    const data = await response.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
  
-Precos pesquisados:
-${priceInfo}
+    // Extrair JSON: primeiro { ate ao ultimo }
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('Sem JSON na resposta');
  
-Lista original:
-${list}
- 
-Responde com JSON seguindo este formato exato:
-{"semana":"${month}","promos":[],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"produto","qty":1,"unit":"un","price":0.99,"promo":""}]}],"total":0},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":0},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":0}],"total_mix":0}`
-          },
-          { role: 'assistant', content: '{' }
-        ]
-      })
-    });
- 
-    if (!r2.ok) {
-      const e = await r2.json().catch(() => ({}));
-      throw new Error('Formatacao: ' + (e.error?.message || r2.status));
-    }
-    const d2 = await r2.json();
-    const txt = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
- 
-    // Combinar prefill '{' + resposta, cortar no ultimo }
-    const full = '{' + txt;
-    const last = full.lastIndexOf('}');
-    if (last < 0) throw new Error('JSON incompleto');
-    const parsed = JSON.parse(full.slice(0, last + 1));
+    const parsed = JSON.parse(text.slice(start, end + 1));
     parsed.saving_weekly = 0;
     parsed.saving_annual = 0;
     return res.status(200).json(parsed);
