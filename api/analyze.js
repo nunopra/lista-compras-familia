@@ -4,21 +4,21 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
+ 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY nao configurada' });
-
+ 
   const { list } = req.body || {};
   if (!list) return res.status(400).json({ error: 'Campo list em falta' });
-
+ 
   const prompt = `Analisa esta lista de compras para uma familia portuguesa de 4 pessoas (2 adultos + 2 criancas de 4 e 6 anos) em Lisboa/Matosinhos.
-
+ 
 TAREFA:
 1. Pesquisa os precos ATUAIS de cada produto nas lojas portuguesas (LIDL, Pingo Doce, ALDI)
 2. Verifica se ha promocoes, cupoes ou descontos ativos esta semana em cada loja
 3. Distribui cada produto pela loja com melhor preco/promocao neste momento
 4. Calcula a poupanca vs Mercadona (referencia: 227 euros/semana)
-
+ 
 NOMES DOS PRODUTOS NOS RECIBOS DESTA FAMILIA (usa estes nomes exatos para pesquisar precos atuais):
 - Atum ao natural 120g → pesquisa "atum natural LIDL" / "atum natural Pingo Doce"
 - Arroz agulha → pesquisa "arroz agulha LIDL embalagem familiar"
@@ -48,18 +48,18 @@ NOMES DOS PRODUTOS NOS RECIBOS DESTA FAMILIA (usa estes nomes exatos para pesqui
 - Bolachas digestive → pesquisa "bolachas digestive Pingo Doce 400g preco"
 - Mel → pesquisa "mel floral LIDL preco"
 - Papel cozinha → pesquisa "rolo cozinha LIDL preco"
-
+ 
 ESTRATEGIA DE DISTRIBUICAO:
 - LIDL: conservas, basicos, carnes, laticinios, snacks, limpeza, higiene, congelados, peixe congelado
 - Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes premium
 - ALDI: alternativa quando tem melhor preco que LIDL esta semana
-
+ 
 INSTRUCOES:
 - Usa os precos ATUAIS encontrados na pesquisa, nunca estimativas desatualizadas
 - Se encontrares promocao ou cupao ativo esta semana, indica no campo "promo" (ex: "Lidl Plus gratis", "-30% esta semana", "2 por 1", "Poupa Mais -20%")
 - Deixa "promo": "" se nao ha promocao confirmada neste momento
 - Se nao encontrares preco atual para um produto especifico, estima com base em precos de marcas proprias portuguesas atuais
-
+ 
 Responde APENAS com JSON valido (sem markdown, sem texto antes ou depois):
 {
   "semana": "Mai 2026",
@@ -101,17 +101,18 @@ Responde APENAS com JSON valido (sem markdown, sem texto antes ou depois):
   "saving_weekly": 69.50,
   "saving_annual": 3614.00
 }
-
+ 
 LISTA DE COMPRAS:
 ${list}`;
-
+ 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'web-search-2025-03-05'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
@@ -119,31 +120,30 @@ ${list}`;
         tools: [
           {
             type: 'web_search_20250305',
-            name: 'web_search',
-            max_uses: 8
+            name: 'web_search'
           }
         ],
         messages: [{ role: 'user', content: prompt }]
       })
     });
-
+ 
     if (!response.ok) {
       const err = await response.json();
       return res.status(response.status).json({ error: err.error?.message || 'Erro na API' });
     }
-
+ 
     const data = await response.json();
-
+ 
     // Extrair apenas blocos de texto (web_search devolve blocos mistos)
     const text = (data.content || [])
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('');
-
+ 
     const clean = text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     return res.status(200).json(parsed);
-
+ 
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
