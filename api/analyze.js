@@ -13,25 +13,9 @@ export default async function handler(req, res) {
  
   const month = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
  
-  const prompt = `Pesquisa os precos atuais em Portugal (${month}) para esta lista de compras e distribui pelos supermercados mais baratos: LIDL, Pingo Doce e ALDI.
- 
-Familia de 4 pessoas em Matosinhos. Estrategia:
-- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
-- Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
-- ALDI: alternativa quando tem melhor preco que LIDL
- 
-Pesquisa precos atuais e promocoes desta semana (Lidl Plus, Poupa Mais, etc).
- 
-LISTA:
-${list}
- 
-Coloca o resultado final dentro de tags <json> assim:
-<json>
-{"semana":"${month}","promos":["promo real se encontrada"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}
-</json>`;
- 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // ── FASE 1: pesquisa web de preços reais (~15-25s) ──
+    const r1 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,42 +25,70 @@ Coloca o resultado final dentro de tags <json> assim:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 2000,
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{
+          role: 'user',
+          content: `Pesquisa os precos ATUAIS em Portugal (${month}) nos supermercados LIDL, Pingo Doce e ALDI para estes produtos. Verifica promocoes ativas (Lidl Plus, Poupa Mais, etc). Responde com uma lista simples de produto: preco, loja, promocao se houver.
+ 
+LISTA:
+${list}`
+        }]
       })
     });
  
-    if (!response.ok) {
-      const errText = await response.text();
-      let errMsg;
-      try { errMsg = JSON.parse(errText)?.error?.message; } catch(e) { errMsg = errText.slice(0, 200); }
-      return res.status(response.status).json({ error: errMsg || 'Erro ' + response.status });
-    }
+    if (!r1.ok) throw new Error('Pesquisa falhou: ' + r1.status);
+    const d1 = await r1.json();
+    const priceInfo = (d1.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
  
-    const data = await response.json();
-    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    // ── FASE 2: formatar JSON com prefill garantido (~3-5s) ──
+    const r2 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 3000,
+        messages: [
+          {
+            role: 'user',
+            content: `Com base nestes precos pesquisados hoje em Portugal, distribui a lista pelos supermercados.
  
-    // Extrair JSON das tags <json>...</json>
-    const tagMatch = text.match(/<json>\s*([\s\S]*?)\s*<\/json>/);
-    if (tagMatch) {
-      const parsed = JSON.parse(tagMatch[1]);
-      parsed.saving_weekly = 0;
-      parsed.saving_annual = 0;
-      return res.status(200).json(parsed);
-    }
+PRECOS ENCONTRADOS:
+${priceInfo}
  
-    // Fallback: tentar extrair JSON diretamente
-    const clean = text.replace(/```json|```/g, '').trim();
-    const jsonMatch = clean.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      parsed.saving_weekly = 0;
-      parsed.saving_annual = 0;
-      return res.status(200).json(parsed);
-    }
+Estrategia:
+- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
+- Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
+- ALDI: alternativa quando tem melhor preco
  
-    throw new Error('Nao foi possivel extrair JSON da resposta');
+Formato do JSON de resposta:
+{"semana":"${month}","promos":["promo ativa se houver"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`
+          },
+          {
+            role: 'assistant',
+            content: '{"semana":"'
+          }
+        ]
+      })
+    });
+ 
+    if (!r2.ok) throw new Error('Formatacao falhou: ' + r2.status);
+    const d2 = await r2.json();
+    const rawText = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+ 
+    // Combinar prefill + resposta e extrair JSON completo
+    const full = '{"semana":"' + rawText;
+    const lastBrace = full.lastIndexOf('}');
+    if (lastBrace < 0) throw new Error('JSON incompleto na resposta');
+    const parsed = JSON.parse(full.slice(0, lastBrace + 1));
+ 
+    parsed.saving_weekly = 0;
+    parsed.saving_annual = 0;
+    return res.status(200).json(parsed);
  
   } catch (err) {
     return res.status(500).json({ error: err.message });
