@@ -11,96 +11,53 @@ export default async function handler(req, res) {
   const { list } = req.body || {};
   if (!list) return res.status(400).json({ error: 'Campo list em falta' });
  
-  const prompt = `Analisa esta lista de compras para uma familia portuguesa de 4 pessoas (2 adultos + 2 criancas de 4 e 6 anos) em Lisboa/Matosinhos.
+  const prompt = `Analisa esta lista de compras para uma familia portuguesa de 4 pessoas em Matosinhos e distribui os produtos pelos supermercados mais baratos: LIDL, Pingo Doce e ALDI.
  
-TAREFA:
-1. Pesquisa os precos ATUAIS de cada produto nas lojas portuguesas (LIDL, Pingo Doce, ALDI)
-2. Verifica se ha promocoes, cupoes ou descontos ativos esta semana em cada loja
-3. Distribui cada produto pela loja com melhor preco/promocao neste momento
-4. Calcula a poupanca vs Mercadona (referencia: 227 euros/semana)
+ESTRATEGIA DESTA FAMILIA:
+- LIDL: conservas, basicos (arroz, massa), laticinios, snacks, limpeza, higiene, congelados
+- Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes frescas
+- ALDI: alternativa ao LIDL quando tem melhor preco
  
-NOMES DOS PRODUTOS NOS RECIBOS DESTA FAMILIA (usa estes nomes exatos para pesquisar precos atuais):
-- Atum ao natural 120g → pesquisa "atum natural LIDL" / "atum natural Pingo Doce"
-- Arroz agulha → pesquisa "arroz agulha LIDL embalagem familiar"
-- Queijo flamengo fatiado → pesquisa "queijo flamengo fatiado LIDL"
-- Pescada congelada → pesquisa "MSC lombos pescada LIDL"
-- Gelados → pesquisa "gelado Double Bilionario LIDL" / "gelado Space Runners LIDL"
-- Legumes congelados → pesquisa "mistura legumes chinesa LIDL" / "mistura mexicana LIDL"
-- Espinafres → pesquisa "espinafres LIDL"
-- Mirtilos → pesquisa "mirtilos 500g LIDL"
-- Iogurte grego → pesquisa "iogurte grego natural LIDL"
-- Iogurte com proteina → pesquisa "iogurte proteina pack LIDL"
-- Natas culinaria → pesquisa "natas culinaria 200ml LIDL"
-- Salmao fresco → pesquisa "salmao posta LIDL fresco preco"
-- Bife vaca → pesquisa "bife novilho angus Pingo Doce preco"
-- Hamburguer vaca → pesquisa "hamburguer novilho angus 400g Pingo Doce"
-- Frango → pesquisa "pernas frango Pingo Doce" / "peito frango Pingo Doce preco"
-- Peixe fresco → pesquisa "robalo fresco Pingo Doce preco kg"
-- Morangos → pesquisa "morango 500g Pingo Doce preco"
-- Kiwi → pesquisa "kiwi sungold zespri Pingo Doce"
-- Cenoura → pesquisa "cenoura granel Pingo Doce kg preco"
-- Maca → pesquisa "maca gala Pingo Doce kg preco"
-- Broculos → pesquisa "broculos Pingo Doce kg preco"
-- Courgette → pesquisa "curgete Pingo Doce kg preco"
-- Abobora → pesquisa "abobora manteiga Pingo Doce preco"
-- Uvas → pesquisa "uva honey bran Pingo Doce"
-- Ovos → pesquisa "ovos 12 Pingo Doce preco" / "ovos 12 LIDL preco"
-- Bolachas digestive → pesquisa "bolachas digestive Pingo Doce 400g preco"
-- Mel → pesquisa "mel floral LIDL preco"
-- Papel cozinha → pesquisa "rolo cozinha LIDL preco"
- 
-ESTRATEGIA DE DISTRIBUICAO:
-- LIDL: conservas, basicos, carnes, laticinios, snacks, limpeza, higiene, congelados, peixe congelado
-- Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes premium
-- ALDI: alternativa quando tem melhor preco que LIDL esta semana
+NOMES REAIS DOS PRODUTOS DESTA FAMILIA (usa estes para atribuir precos corretos):
+- Atum ao natural 120g → LIDL 0,79€/lata
+- Arroz agulha emb familiar → LIDL ~2,15€
+- Queijo flamengo fatiado → LIDL ~3,99€
+- Pescada lombos MSC → LIDL ~9,69€
+- Gelado Double Bilionario → LIDL ~3,49€
+- Gelado Space Runners → LIDL ~2,69€
+- Mistura legumes chinesa → LIDL ~0,99€
+- Mistura legumes mexicana → LIDL ~2,99€
+- Espinafres → LIDL ~1,15€
+- Mirtilos 500g → LIDL ~6,59€
+- Iogurte grego natural → LIDL ~1,75€
+- Iogurte com proteina Pack8 → LIDL ~3,29€
+- Natas para culinaria 200ml → LIDL ~0,79€/uni
+- Salmao posta → LIDL ~17,99€/kg
+- Bife Novilho Angus → PD ~30€/kg
+- Hamburguer Novilho Angus 400g → PD ~6,98€
+- Pernas de frango → PD ~8,49€/kg
+- Peito de frango → PD ~7,99€/kg
+- Robalo fresco → PD ~9,99€/kg
+- Morangos 500g → PD ~2,99€ (frequentemente com promo -1€)
+- Kiwi Sungold Zespri → PD ~3,99€/emb
+- Cenoura → PD ~1,09€/kg
+- Maca Gala → PD ~1,99€/kg
+- Broculos → PD ~2,99€/kg
+- Courgette → PD ~1,99€/kg
+- Abobora manteiga → PD ~1,79€/kg
+- Bolachas Digestive 400g → PD ~0,99€
+- Bolachas Aveia 300g → PD ~1,09€
+- Papel de cozinha 2 folhas → LIDL ~0,79€
  
 INSTRUCOES:
-- Usa os precos ATUAIS encontrados na pesquisa, nunca estimativas desatualizadas
-- Se encontrares promocao ou cupao ativo esta semana, indica no campo "promo" (ex: "Lidl Plus gratis", "-30% esta semana", "2 por 1", "Poupa Mais -20%")
-- Deixa "promo": "" se nao ha promocao confirmada neste momento
-- Se nao encontrares preco atual para um produto especifico, estima com base em precos de marcas proprias portuguesas atuais
+- Usa os precos de referencia acima quando disponiveis
+- Para outros produtos estima com base em marcas proprias portuguesas atuais
+- O campo "promo" so preenches se souberes de uma promocao concreta (ex: "Lidl Plus gratis", "Poupa Mais -20%"); caso contrario deixa ""
+- NAO incluas o campo saving_weekly nem saving_annual na resposta — nao e necessario
+- Responde APENAS com JSON valido, sem markdown, sem texto antes ou depois
  
-Responde APENAS com JSON valido (sem markdown, sem texto antes ou depois):
-{
-  "semana": "Mai 2026",
-  "promos": ["LIDL: Mirtilos 500g gratis com Lidl Plus", "Pingo Doce: Morango 500g poupanca imediata -1euro"],
-  "stores": [
-    {
-      "id": "lidl",
-      "name": "LIDL",
-      "color": "#f5c200",
-      "tagline": "cabaz principal",
-      "categories": [
-        {
-          "name": "Conservas",
-          "items": [
-            {"name": "Atum ao natural 120g", "qty": 3, "unit": "latas", "price": 0.79, "promo": ""}
-          ]
-        }
-      ],
-      "total": 72.50
-    },
-    {
-      "id": "pingodoce",
-      "name": "Pingo Doce",
-      "color": "#00873d",
-      "tagline": "frescos e padaria",
-      "categories": [],
-      "total": 55.00
-    },
-    {
-      "id": "aldi",
-      "name": "ALDI",
-      "color": "#003087",
-      "tagline": "alternativas e promocoes",
-      "categories": [],
-      "total": 30.00
-    }
-  ],
-  "total_mix": 157.50,
-  "saving_weekly": 69.50,
-  "saving_annual": 3614.00
-}
+Formato da resposta:
+{"semana":"Mai 2026","promos":["exemplo de promo real"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}
  
 LISTA DE COMPRAS:
 ${list}`;
@@ -111,18 +68,11 @@ ${list}`;
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05'
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 5000,
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search'
-          }
-        ],
+        max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -133,17 +83,24 @@ ${list}`;
     }
  
     const data = await response.json();
- 
-    // Extrair apenas blocos de texto (web_search devolve blocos mistos)
-    const text = (data.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('');
- 
+    const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
     const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      // Try to extract JSON object if there's surrounding text
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+      else throw new Error('Resposta nao e JSON valido: ' + clean.slice(0, 100));
+    }
+    
+    // Add dummy saving fields so app doesn't break
+    if (!parsed.saving_weekly) parsed.saving_weekly = 0;
+    if (!parsed.saving_annual) parsed.saving_annual = 0;
+    
     return res.status(200).json(parsed);
- 
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
