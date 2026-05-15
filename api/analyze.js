@@ -13,18 +13,24 @@ export default async function handler(req, res) {
  
   const month = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
  
-  const prompt = `Pesquisa os precos atuais em Portugal (${month}) nos supermercados LIDL, Pingo Doce e ALDI para esta lista de compras. Verifica promocoes ativas (Lidl Plus, Poupa Mais, etc).
+  const prompt = `Distribui esta lista de compras pelos supermercados mais baratos em Portugal (${month}) para uma familia de 4 pessoas em Matosinhos: LIDL, Pingo Doce e ALDI.
  
-Estrategia de distribuicao:
+Estrategia:
 - LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
 - Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
 - ALDI: alternativa quando tem melhor preco
  
-LISTA:
-${list}
+Precos de referencia desta familia (recibos reais de 2026):
+LIDL: atum natural 120g=0,79€, arroz agulha familiar=2,15€, queijo flamengo fatiado=3,99€, lombos pescada MSC=9,69€, gelado Double Bilionario=3,49€, gelado Space Runners=2,69€, mistura legumes chinesa=0,99€, mistura mexicana=2,99€, espinafres=1,15€, mirtilos 500g=6,59€, iogurte grego natural=1,75€, iogurte proteina pack8=3,29€, natas culinaria 200ml=0,79€, salmao posta=17,99€/kg, mel floral=5,29€
+Pingo Doce: bife novilho angus=30,48€/kg, hamburguer angus 400g=6,98€, pernas frango=8,49€/kg, peito frango=7,99€/kg, robalo fresco=9,99€/kg, morango 500g=2,99€, kiwi sungold zespri=3,99€, cenoura granel=1,09€/kg, maca gala=1,99€/kg, broculos=2,99€/kg, curgete=1,99€/kg, abobora manteiga=1,79€/kg, bolachas digestive=0,99€, ovos 12=4,59€
  
-Responde APENAS com o objeto JSON abaixo preenchido, sem texto antes ou depois:
-{"semana":"${month}","promos":["promocao ativa se houver"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`;
+Para produtos sem referencia usa o teu conhecimento de precos atuais de marcas proprias portuguesas. Indica promocoes que conheças (Lidl Plus, Poupa Mais).
+ 
+Responde APENAS com JSON valido (sem texto, sem markdown):
+{"semana":"${month}","promos":[],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}
+ 
+LISTA:
+${list}`;
  
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -32,13 +38,11 @@ Responde APENAS com o objeto JSON abaixo preenchido, sem texto antes ou depois:
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05'
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -50,13 +54,8 @@ Responde APENAS com o objeto JSON abaixo preenchido, sem texto antes ou depois:
  
     const data = await response.json();
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
- 
-    // Extrair JSON: primeiro { ate ao ultimo }
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start < 0 || end <= start) throw new Error('Sem JSON na resposta');
- 
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
     parsed.saving_weekly = 0;
     parsed.saving_annual = 0;
     return res.status(200).json(parsed);
