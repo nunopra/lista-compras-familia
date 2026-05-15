@@ -15,17 +15,6 @@ export default async function handler(req, res) {
 
   try {
     // ── FASE 1: pesquisa web de preços atuais ──
-    const searchPrompt = `Hoje e ${today}. Pesquisa os precos ATUAIS nos supermercados portugueses LIDL, Pingo Doce e ALDI para esta lista de compras de uma familia em Matosinhos.
-
-Usa os nomes exatos para pesquisar:
-LIDL: atum natural 120g, arroz agulha emb familiar, queijo flamengo fatiado, lombos pescada MSC, gelado Double Bilionario, gelado Space Runners, mistura legumes chinesa, mistura legumes mexicana, espinafres, mirtilos 500g, iogurte grego natural, iogurte proteina pack8, natas culinaria 200ml, salmao posta fresco, mel floral, rolo cozinha 2 folhas
-Pingo Doce: bife novilho angus, hamburguer angus 400g, pernas frango, peito frango, robalo fresco, morango 500g, kiwi sungold zespri, cenoura granel kg, maca gala kg, broculos kg, curgete kg, abobora manteiga, bolachas digestive 400g, ovos 12 unidades
-
-Para cada produto encontra: preco atual, e se ha promocao ativa (Lidl Plus, Poupa Mais, desconto semana).
-
-LISTA DE COMPRAS:
-${list}`;
-
     const r1 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -36,37 +25,29 @@ ${list}`;
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 3000,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: searchPrompt }]
+        messages: [{
+          role: 'user',
+          content: `Hoje e ${today}. Pesquisa os precos ATUAIS nos supermercados LIDL, Pingo Doce e ALDI em Portugal para estes produtos. Verifica promocoes, cupoes Lidl Plus e descontos Poupa Mais ativos esta semana.
+
+Produtos a pesquisar (nomes exatos como aparecem nos recibos):
+LIDL: "atum ao natural 120g", "arroz agulha embalagem familiar", "queijo flamengo fatiado", "lombos pescada MSC", "gelado Double Bilionario", "gelado Space Runners", "mistura legumes chinesa", "mistura legumes mexicana", "espinafres", "mirtilos 500g", "iogurte grego natural", "iogurte proteina pack8", "natas culinaria 200ml", "salmao posta fresco"
+Pingo Doce: "bife novilho angus", "hamburguer angus 400g", "pernas frango", "peito frango", "robalo fresco", "morango 500g", "kiwi sungold zespri", "cenoura granel", "maca gala", "broculos", "curgete kg", "abobora manteiga", "bolachas digestive 400g", "ovos 12"
+
+LISTA DE COMPRAS:
+${list}
+
+Lista os precos atuais encontrados e qualquer promocao ativa.`
+        }]
       })
     });
 
-    if (!r1.ok) {
-      const err = await r1.json();
-      throw new Error(err.error?.message || 'Erro fase 1: ' + r1.status);
-    }
-
+    if (!r1.ok) throw new Error('Pesquisa falhou: ' + r1.status);
     const d1 = await r1.json();
-    const priceResearch = (d1.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n');
+    const priceData = (d1.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 
-    // ── FASE 2: formatar como JSON puro ──
-    const formatPrompt = `Com base nesta pesquisa de precos de hoje (${today}), cria o JSON da lista de compras distribuida por supermercado.
-
-PESQUISA DE PRECOS:
-${priceResearch}
-
-Regras de distribuicao:
-- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
-- Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes premium
-- ALDI: alternativa quando tem preco melhor que LIDL
-
-Responde APENAS com JSON valido, sem texto antes ou depois, sem markdown:
-{"semana":"Mai 2026","promos":["LIDL: exemplo promo ativa esta semana"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`;
-
+    // ── FASE 2: formatar JSON com prefill garantido ──
     const r2 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -76,30 +57,35 @@ Responde APENAS com JSON valido, sem texto antes ou depois, sem markdown:
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 3000,
         messages: [
-          { role: 'user', content: formatPrompt },
-          { role: 'assistant', content: '{' }
+          {
+            role: 'user',
+            content: `Com base nestes precos pesquisados hoje (${today}), distribui a lista pelos supermercados e devolve APENAS JSON.
+
+PRECOS PESQUISADOS:
+${priceData}
+
+REGRAS:
+- LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
+- Pingo Doce: frescos (legumes ao peso, frutas), padaria, peixe fresco, carnes premium
+- ALDI: alternativa quando tem melhor preco que LIDL
+
+FORMATO EXACTO (devolve apenas este JSON, sem texto):
+{"semana":"Mai 2026","promos":["LIDL: promo ativa"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`
+          },
+          {
+            role: 'assistant',
+            content: '{"semana":"'
+          }
         ]
       })
     });
 
-    if (!r2.ok) {
-      const err = await r2.json();
-      throw new Error(err.error?.message || 'Erro fase 2: ' + r2.status);
-    }
-
+    if (!r2.ok) throw new Error('Formatacao falhou: ' + r2.status);
     const d2 = await r2.json();
-    const rawText = (d2.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('');
-
-    // A resposta começa onde parou o prefill ('{')
-    const jsonText = '{' + rawText;
-    const parsed = JSON.parse(jsonText);
-
-    // Garantir que campos de poupanca existem (mesmo que 0)
+    const text = (d2.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    const parsed = JSON.parse('{"semana":"' + text);
     parsed.saving_weekly = 0;
     parsed.saving_annual = 0;
 
