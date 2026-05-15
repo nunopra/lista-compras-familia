@@ -13,24 +13,41 @@ export default async function handler(req, res) {
  
   const month = new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
  
-  const prompt = `Distribui esta lista de compras pelos supermercados mais baratos em Portugal (${month}) para uma familia de 4 pessoas em Matosinhos: LIDL, Pingo Doce e ALDI.
+  // Extrai o primeiro objeto JSON completo de um texto com conteudo misto
+  function extractJSON(text) {
+    // Remove markdown
+    const clean = text.replace(/```json/gi, '').replace(/```/g, '');
+    // Encontrar {"semana": especificamente
+    const semanaIdx = clean.indexOf('"semana"');
+    if (semanaIdx < 0) return null;
+    const openBrace = clean.lastIndexOf('{', semanaIdx);
+    if (openBrace < 0) return null;
+    // Contar chavetas para encontrar o fecho correto
+    let depth = 0, inString = false, escape = false;
+    for (let i = openBrace; i < clean.length; i++) {
+      const c = clean[i];
+      if (escape) { escape = false; continue; }
+      if (c === '\\') { escape = true; continue; }
+      if (c === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (c === '{') depth++;
+      if (c === '}') { depth--; if (depth === 0) return clean.slice(openBrace, i + 1); }
+    }
+    return null;
+  }
+ 
+  const prompt = `Pesquisa os precos atuais em Portugal (${month}) nos supermercados LIDL, Pingo Doce e ALDI para esta lista de compras. Verifica promocoes ativas (Lidl Plus, Poupa Mais, etc).
  
 Estrategia:
 - LIDL: conservas, basicos, laticinios, snacks, congelados, limpeza, higiene
 - Pingo Doce: frescos ao peso, padaria, peixe fresco, carnes premium
 - ALDI: alternativa quando tem melhor preco
  
-Precos de referencia desta familia (recibos reais de 2026):
-LIDL: atum natural 120g=0,79€, arroz agulha familiar=2,15€, queijo flamengo fatiado=3,99€, lombos pescada MSC=9,69€, gelado Double Bilionario=3,49€, gelado Space Runners=2,69€, mistura legumes chinesa=0,99€, mistura mexicana=2,99€, espinafres=1,15€, mirtilos 500g=6,59€, iogurte grego natural=1,75€, iogurte proteina pack8=3,29€, natas culinaria 200ml=0,79€, salmao posta=17,99€/kg, mel floral=5,29€
-Pingo Doce: bife novilho angus=30,48€/kg, hamburguer angus 400g=6,98€, pernas frango=8,49€/kg, peito frango=7,99€/kg, robalo fresco=9,99€/kg, morango 500g=2,99€, kiwi sungold zespri=3,99€, cenoura granel=1,09€/kg, maca gala=1,99€/kg, broculos=2,99€/kg, curgete=1,99€/kg, abobora manteiga=1,79€/kg, bolachas digestive=0,99€, ovos 12=4,59€
- 
-Para produtos sem referencia usa o teu conhecimento de precos atuais de marcas proprias portuguesas. Indica promocoes que conheças (Lidl Plus, Poupa Mais).
- 
-Responde APENAS com JSON valido (sem texto, sem markdown):
-{"semana":"${month}","promos":[],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}
- 
 LISTA:
-${list}`;
+${list}
+ 
+No final da tua resposta inclui o JSON com a distribuicao e precos encontrados:
+{"semana":"${month}","promos":["promo ativa"],"stores":[{"id":"lidl","name":"LIDL","color":"#f5c200","tagline":"cabaz principal","categories":[{"name":"Conservas","items":[{"name":"Atum ao natural 120g","qty":3,"unit":"latas","price":0.79,"promo":""}]}],"total":72.50},{"id":"pingodoce","name":"Pingo Doce","color":"#00873d","tagline":"frescos e padaria","categories":[],"total":55.00},{"id":"aldi","name":"ALDI","color":"#003087","tagline":"alternativas","categories":[],"total":20.00}],"total_mix":147.50}`;
  
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -38,11 +55,13 @@ ${list}`;
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'web-search-2025-03-05'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -54,8 +73,10 @@ ${list}`;
  
     const data = await response.json();
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    const jsonStr = extractJSON(text);
+    if (!jsonStr) throw new Error('Sem JSON valido na resposta');
+ 
+    const parsed = JSON.parse(jsonStr);
     parsed.saving_weekly = 0;
     parsed.saving_annual = 0;
     return res.status(200).json(parsed);
